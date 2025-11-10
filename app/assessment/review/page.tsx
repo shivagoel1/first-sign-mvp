@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -86,6 +86,7 @@ export default function AssessmentReviewPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isFetching, setIsFetching] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [hasSubmitted, setHasSubmitted] = useState(false)
 
   const form = useForm<z.infer<typeof accountSchema>>({
     resolver: zodResolver(accountSchema),
@@ -98,10 +99,10 @@ export default function AssessmentReviewPage() {
   })
 
   useEffect(() => {
-    if (!responses || Object.keys(responses).length === 0) {
+    if (!hasSubmitted && (!responses || Object.keys(responses).length === 0)) {
       router.replace('/assessment')
     }
-  }, [responses, router])
+  }, [responses, router, hasSubmitted])
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -110,7 +111,6 @@ export default function AssessmentReviewPage() {
       setIsFetching(true)
       setFetchError(null)
 
-      const supabase = createClient()
       const { data, error } = await supabase
         .from('milestones')
         .select('id, question, category, description')
@@ -146,9 +146,48 @@ export default function AssessmentReviewPage() {
     }, {})
   }, [questionDetails])
 
-  const handleSubmit = form.handleSubmit(async (values) => {
+  const supabase = createClient()
+
+  const submitAssessment = useCallback(
+    async (params: { userId: string; email: string; fullName: string }) => {
+      const sessionData = getSessionData()
+
+      if (
+        !sessionData ||
+        !sessionData.childName ||
+        !sessionData.dateOfBirth ||
+        !sessionData.guestSessionId ||
+        !sessionData.disease ||
+        !sessionData.responses ||
+        Object.keys(sessionData.responses).length === 0
+      ) {
+        throw new Error('Assessment data is missing. Please restart the assessment.')
+      }
+
+      const response = await fetch('/api/submit-assessment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: params.userId,
+          email: params.email,
+          fullName: params.fullName,
+          guestSessionId: sessionData.guestSessionId,
+          childName: sessionData.childName,
+          dateOfBirth: sessionData.dateOfBirth,
+          disease: sessionData.disease,
+          responses: sessionData.responses,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Unable to submit assessment. Please try again.')
+      }
+    },
+    [getSessionData]
+  )
+
+  const handleSignupSubmit = form.handleSubmit(async (values) => {
     setIsLoading(true)
-    const supabase = createClient()
 
     try {
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -165,25 +204,29 @@ export default function AssessmentReviewPage() {
 
       const user = signUpData.user
 
-      const sessionData = getSessionData()
-      const response = await fetch('/api/submit-assessment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
+      if (!signUpData.session) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email: values.email,
-          fullName: values.fullName,
-          ...sessionData,
-        }),
-      })
+          password: values.password,
+        })
 
-      if (!response.ok) {
-        throw new Error('Unable to submit assessment. Please try again.')
+        if (signInError) {
+          throw new Error(
+            signInError.message || 'Account created but unable to sign in automatically.'
+          )
+        }
       }
 
+      await submitAssessment({
+        userId: user.id,
+        email: values.email,
+        fullName: values.fullName,
+      })
+
       toast.success('Your account has been created and your assessment was successfully submitted.')
+      setHasSubmitted(true)
       reset()
-      router.push('/dashboard/parent')
+      router.push('/dashboard')
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : 'Unable to submit your assessment right now.'
@@ -192,6 +235,59 @@ export default function AssessmentReviewPage() {
       setIsLoading(false)
     }
   })
+
+  const handleExistingAccountLogin = async (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault()
+    if (isLoading) return
+
+    setIsLoading(true)
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.user) {
+        router.push('/login')
+        setIsLoading(false)
+        return
+      }
+
+      const user = session.user
+      const userEmail = user.email
+
+      if (!userEmail) {
+        throw new Error('Signed in, but no email is associated with this account.')
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      const resolvedFullName =
+        profile?.full_name ??
+        (user.user_metadata as { full_name?: string | null })?.full_name ??
+        userEmail
+
+      await submitAssessment({
+        userId: user.id,
+        email: userEmail,
+        fullName: resolvedFullName ?? userEmail,
+      })
+
+      toast.success('Assessment submitted successfully.')
+      setHasSubmitted(true)
+      reset()
+      router.push('/dashboard')
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to submit your assessment right now.'
+      toast.error(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 px-6 py-16 text-white">
@@ -335,7 +431,7 @@ export default function AssessmentReviewPage() {
               <Card className="border border-blue-100/70 bg-white/90 shadow-xl">
                 <CardContent className="px-6 py-8">
                   <Form {...form}>
-                    <form className="space-y-6" onSubmit={handleSubmit} noValidate>
+                    <form className="space-y-6" onSubmit={handleSignupSubmit} noValidate>
                       <div className="grid gap-6 sm:grid-cols-2">
                         <FormField
                           control={form.control}
@@ -419,7 +515,11 @@ export default function AssessmentReviewPage() {
 
                       <p className="text-center text-sm text-slate-600">
                         Already have an account?{' '}
-                        <Link href="/login" className="font-semibold text-blue-600 hover:underline">
+                        <Link
+                          href="/login"
+                          onClick={handleExistingAccountLogin}
+                          className="font-semibold text-blue-600 hover:underline"
+                        >
                           Login
                         </Link>
                       </p>

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { differenceInMonths } from 'date-fns'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { Database } from '@/lib/database.types'
 
 type AssessmentPayload = {
   userId?: string
@@ -69,6 +70,21 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
+    const { data: existingAssessment, error: existingAssessmentError } = await supabase
+      .from('assessments')
+      .select('id, child_id')
+      .eq('guest_session_id', guestSessionId)
+      .order('created_at', { ascending: false })
+      .maybeSingle()
+
+    if (existingAssessmentError) {
+      console.error('[submit-assessment] existing assessment lookup failed:', existingAssessmentError)
+      return NextResponse.json(
+        { error: 'Unable to look up existing assessment.' },
+        { status: 500 }
+      )
+    }
+
     // Upsert profile
     console.log('[submit-assessment] upserting profile', {
       userId,
@@ -95,67 +111,112 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Insert child record
-    console.log('[submit-assessment] inserting child', {
-      parent_id: userId,
-      child_name: childName,
-      date_of_birth: dateOfBirth,
-    })
-    const { data: childData, error: childError } = await supabase
-      .from('children')
-      .insert({
+    let childId = existingAssessment?.child_id ?? null
+
+    if (!childId) {
+      console.log('[submit-assessment] creating child record', {
         parent_id: userId,
         child_name: childName,
         date_of_birth: dateOfBirth,
       })
-      .select('id')
-      .single()
+      const { data: childData, error: childError } = await supabase
+        .from('children')
+        .insert({
+          parent_id: userId,
+          child_name: childName,
+          date_of_birth: dateOfBirth,
+        })
+        .select('id')
+        .single()
 
-    if (childError || !childData) {
-      console.error('[submit-assessment] child insert failed:', childError)
+      if (childError || !childData) {
+        console.error('[submit-assessment] child insert failed:', childError)
+        return NextResponse.json(
+          { error: 'Unable to save child information.' },
+          { status: 500 }
+        )
+      }
+
+      childId = childData.id
+    } else {
+      await supabase
+        .from('children')
+        .update({ parent_id: userId })
+        .eq('id', childId)
+    }
+
+    if (!childId) {
       return NextResponse.json(
-        { error: 'Unable to save child information.' },
+        { error: 'Unable to associate child record.' },
         { status: 500 }
       )
     }
 
-    const childId = childData.id
-    console.log('[submit-assessment] inserted child id', childId)
+    let assessmentId: string
 
-    // Insert assessment record
-    const assessmentInsertPayload = {
-      child_id: childId,
-      parent_id: userId,
-      guest_session_id: null,
-      age_at_assessment_months: ageInMonths,
-      status: 'completed',
-      completed_at: now.toISOString(),
-      consent_given: true,
-      consent_timestamp: now.toISOString(),
+    if (existingAssessment?.id) {
+      assessmentId = existingAssessment.id
+      console.log('[submit-assessment] updating existing assessment', assessmentId)
+      const { error: updateAssessmentError } = await supabase
+        .from('assessments')
+        .update({
+          parent_id: userId,
+          child_id: childId,
+          guest_session_id: null,
+          age_at_assessment_months: ageInMonths,
+          status: 'completed',
+          completed_at: now.toISOString(),
+          consent_given: true,
+          consent_timestamp: now.toISOString(),
+        })
+        .eq('id', assessmentId)
+
+      if (updateAssessmentError) {
+        console.error('[submit-assessment] assessment update failed:', updateAssessmentError)
+        return NextResponse.json(
+          { error: 'Unable to update assessment.' },
+          { status: 500 }
+        )
+      }
+
+      await supabase
+        .from('assessment_responses')
+        .delete()
+        .eq('assessment_id', assessmentId)
+    } else {
+      const assessmentInsertPayload: Database['public']['Tables']['assessments']['Insert'] = {
+        child_id: childId,
+        parent_id: userId,
+        guest_session_id: null,
+        age_at_assessment_months: ageInMonths,
+        status: 'completed',
+        completed_at: now.toISOString(),
+        consent_given: true,
+        consent_timestamp: now.toISOString(),
+      }
+      console.log('[submit-assessment] inserting assessment', assessmentInsertPayload)
+      const { data: assessmentData, error: assessmentError } = await supabase
+        .from('assessments')
+        .insert(assessmentInsertPayload)
+        .select('id')
+        .single()
+
+      if (assessmentError || !assessmentData) {
+        console.error('[submit-assessment] assessment insert failed:', assessmentError)
+        return NextResponse.json(
+          { error: 'Unable to save assessment.' },
+          { status: 500 }
+        )
+      }
+
+      assessmentId = assessmentData.id
     }
-    console.log('[submit-assessment] inserting assessment', assessmentInsertPayload)
-    const { data: assessmentData, error: assessmentError } = await supabase
-      .from('assessments')
-      .insert(assessmentInsertPayload)
-      .select('id')
-      .single()
 
-    if (assessmentError || !assessmentData) {
-      console.error('[submit-assessment] assessment insert failed:', assessmentError)
-      return NextResponse.json(
-        { error: 'Unable to save assessment.' },
-        { status: 500 }
-      )
-    }
-
-    const assessmentId = assessmentData.id
-    console.log('[submit-assessment] inserted assessment id', assessmentId)
-
-    const responseEntries = Object.entries(responses).map(
+    const responseEntries: Database['public']['Tables']['assessment_responses']['Insert'][] = Object.entries(responses).map(
       ([milestoneId, { response, notes }]) => ({
         assessment_id: assessmentId,
         milestone_id: milestoneId,
-        response,
+        response: response as Database['public']['Tables']['assessment_responses']['Insert']['response'],
         notes: notes ?? null,
       })
     )
@@ -233,80 +294,115 @@ export async function POST(request: NextRequest) {
       red_flags: redFlags,
       red_flag_count: redFlagCount,
     })
-    const { data: assessmentResult, error: resultError } = await supabase
+    const { data: existingResult, error: existingResultError } = await supabase
       .from('assessment_results')
-      .insert({
-        assessment_id: assessmentId,
-        overall_score: overallScore,
-        category_scores: categoryScores,
-        red_flags: redFlags,
-        red_flag_count: redFlagCount,
-        ai_report: null,
-        parent_visible: false,
-        status: 'generating',
-      })
       .select('id')
-      .single()
+      .eq('assessment_id', assessmentId)
+      .maybeSingle()
 
-    if (resultError || !assessmentResult) {
-      console.error('[submit-assessment] assessment_results insert failed:', resultError)
+    if (existingResultError) {
+      console.error('[submit-assessment] assessment_results lookup failed:', existingResultError)
       return NextResponse.json(
         { error: 'Unable to finalize assessment.' },
         { status: 500 }
       )
     }
 
-    const assessmentResultId = assessmentResult.id
-    console.log('[submit-assessment] inserted assessment_result id', assessmentResultId)
+    let assessmentResultId: string
 
-    console.log('[submit-assessment] inserting physician referral', {
-      assessment_result_id: assessmentResultId,
-      parent_id: userId,
-      physician_id: null,
-      status: 'pending',
-      review_status: 'pending',
-    })
-    const { error: referralError } = await supabase
+    const resultPayload: Omit<
+      Database['public']['Tables']['assessment_results']['Insert'],
+      'assessment_id'
+    > = {
+      overall_score: overallScore,
+      category_scores: categoryScores,
+      red_flags: redFlags,
+      red_flag_count: redFlagCount,
+      ai_report: null,
+      parent_visible: false,
+      status: 'awaiting_review',
+    }
+
+    if (existingResult?.id) {
+      const { error: updateResultError } = await supabase
+        .from('assessment_results')
+        .update(resultPayload)
+        .eq('id', existingResult.id)
+
+      if (updateResultError) {
+        console.error('[submit-assessment] assessment_results update failed:', updateResultError)
+        return NextResponse.json(
+          { error: 'Unable to finalize assessment.' },
+          { status: 500 }
+        )
+      }
+      assessmentResultId = existingResult.id
+    } else {
+      const { data: assessmentResult, error: resultError } = await supabase
+        .from('assessment_results')
+        .insert({
+          assessment_id: assessmentId,
+          ...resultPayload,
+        })
+        .select('id')
+        .single()
+
+      if (resultError || !assessmentResult) {
+        console.error('[submit-assessment] assessment_results insert failed:', resultError)
+        return NextResponse.json(
+          { error: 'Unable to finalize assessment.' },
+          { status: 500 }
+        )
+      }
+      assessmentResultId = assessmentResult.id
+    }
+
+    const { data: existingReferral, error: referralLookupError } = await supabase
       .from('physician_referrals')
-      .insert({
-        assessment_result_id: assessmentResultId,
-        parent_id: userId,
-        physician_id: null,
-        status: 'pending',
-        review_status: 'pending',
-      })
+      .select('id')
+      .eq('assessment_result_id', assessmentResultId)
+      .maybeSingle()
 
-    if (referralError) {
-      console.error('[submit-assessment] physician referral insert failed:', referralError)
+    if (referralLookupError) {
+      console.error('[submit-assessment] referral lookup failed:', referralLookupError)
       return NextResponse.json(
         { error: 'Unable to create physician referral.' },
         { status: 500 }
       )
     }
 
-    // Fire-and-forget AI generation
-    ;(async () => {
-      try {
-        const origin =
-          process.env.NEXT_PUBLIC_APP_URL ??
-          process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL}`
-            : request.nextUrl.origin
-        await fetch(`${origin}/api/generate-storybook`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            assessmentResultId,
-            childName,
-            ageMonths: ageInMonths,
-            disease,
-            responses,
-          }),
-        })
-      } catch (error) {
-        console.error('[submit-assessment] generate-storybook trigger failed:', error)
+    if (existingReferral?.id) {
+      const { error: updateReferralError } = await supabase
+        .from('physician_referrals')
+        .update({ parent_id: userId })
+        .eq('id', existingReferral.id)
+
+      if (updateReferralError) {
+        console.error('[submit-assessment] referral update failed:', updateReferralError)
+        return NextResponse.json(
+          { error: 'Unable to update physician referral.' },
+          { status: 500 }
+        )
       }
-    })()
+    } else {
+      const { error: referralError } = await supabase
+        .from('physician_referrals')
+        .insert({
+          assessment_result_id: assessmentResultId,
+          parent_id: userId,
+          physician_id: null,
+          status: 'pending',
+          review_status: 'pending',
+        })
+
+      if (referralError) {
+        console.error('[submit-assessment] physician referral insert failed:', referralError)
+        return NextResponse.json(
+          { error: 'Unable to create physician referral.' },
+          { status: 500 }
+        )
+      }
+    }
 
     return NextResponse.json({ success: true, assessmentId })
   } catch (error) {

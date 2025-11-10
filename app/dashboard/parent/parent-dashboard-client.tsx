@@ -65,26 +65,44 @@ type StorybookContent = {
   }>
 }
 
-const emptyBadge = {
-  label: 'Not started',
-  tone: 'secondary' as const,
-}
+const statusMeta = {
+  pending: {
+    label: 'Pending Review',
+    message:
+      'Your assessment has been submitted and is pending physician approval.',
+    badgeClass: 'bg-amber-100 text-amber-700',
+  },
+  awaiting_review: {
+    label: 'Awaiting Review',
+    message:
+      'Your assessment has been submitted and is pending physician approval.',
+    badgeClass: 'bg-amber-100 text-amber-700',
+  },
+  generating: {
+    label: 'Generating Storybook',
+    message: 'Your personalized storybook is being generated.',
+    badgeClass: 'bg-sky-100 text-sky-700',
+  },
+  approved: {
+    label: 'Approved',
+    message: 'Your storybook is ready to view!',
+    badgeClass: 'bg-emerald-100 text-emerald-700',
+  },
+  needs_revision: {
+    label: 'Needs Revision',
+    message: 'Your assessment requires additional review.',
+    badgeClass: 'bg-rose-100 text-rose-700',
+  },
+  rejected: {
+    label: 'Requires Attention',
+    message: 'Your assessment requires additional review.',
+    badgeClass: 'bg-rose-100 text-rose-700',
+  },
+} as const
 
-function getStatusBadge(status: string | null, visible: boolean | null) {
-  if (!status) return emptyBadge
-
-  switch (status) {
-    case 'awaiting_review':
-      return { label: '🟡 Under Physician Review', tone: 'warning' as const }
-    case 'approved':
-      return visible
-        ? { label: '🟢 Ready to View', tone: 'success' as const }
-        : { label: 'Awaiting release', tone: 'secondary' as const }
-    case 'needs_revision':
-      return { label: '🔴 Needs Revision', tone: 'destructive' as const }
-    default:
-      return { label: status, tone: 'secondary' as const }
-  }
+function getStatusMeta(status: string | null) {
+  if (!status) return statusMeta.pending
+  return statusMeta[status as keyof typeof statusMeta] ?? statusMeta.pending
 }
 
 function monthsBetween(dob: string): number {
@@ -439,10 +457,7 @@ export default function ParentDashboardClient({
             ) : (
               <div className="space-y-6">
                 {currentChild.assessments.map((assessment) => {
-                  const badge = getStatusBadge(
-                    assessment.status,
-                    Boolean(assessment.parent_visible)
-                  )
+                  const meta = getStatusMeta(assessment.status)
                   const assessmentDate = assessment.completed_at
                     ? new Date(assessment.completed_at).toLocaleDateString(undefined, {
                         month: 'long',
@@ -461,12 +476,17 @@ export default function ParentDashboardClient({
                           <p className="text-lg font-semibold text-gray-900">
                             Assessment ID: {assessment.id.slice(0, 8)}...
                           </p>
-                          <Badge className="w-fit rounded-full bg-gray-200 px-3 py-1 text-sm font-semibold text-gray-700">
-                            {badge.label}
+                          <Badge
+                            className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${meta.badgeClass}`}
+                          >
+                            {meta.label}
                           </Badge>
+                          <p className="text-sm text-gray-600 leading-relaxed">
+                            {meta.message}
+                          </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-                          {assessment.parent_visible && assessment.ai_report ? (
+                          {assessment.status === 'approved' && assessment.parent_visible ? (
                             <Button
                               className="rounded-lg bg-indigo-100 px-6 py-2.5 text-indigo-700 transition hover:bg-indigo-200"
                               onClick={() => openStorybook(currentChild, assessment)}
@@ -479,7 +499,7 @@ export default function ParentDashboardClient({
                               Storybook in progress
                             </span>
                           )}
-                          {assessment.parent_visible && assessment.parent_pdf_url ? (
+                          {assessment.status === 'approved' && assessment.parent_visible && assessment.parent_pdf_url ? (
                             <Button asChild className={primaryButtonClasses}>
                               <a
                                 href={assessment.parent_pdf_url}
