@@ -25,6 +25,10 @@
 
 /* Apply base styles using CSS directly (not @apply) */
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   * {
     border-color: hsl(var(--color-border));
   }
