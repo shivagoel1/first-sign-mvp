@@ -23,7 +23,7 @@ export async function GET(
       .eq('id', session.user.id)
       .maybeSingle()
 
-    if (profile?.role !== 'physician') {
+    if (profile?.role !== 'physician' && profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -37,6 +37,11 @@ export async function GET(
         id,
         assessment_id,
         ai_report,
+        ai_processing_status,
+        ai_processing_progress,
+        ai_generation_cost,
+        ai_tokens_used,
+        ai_images_generated,
         red_flag_count,
         red_flags,
         physician_notes,
@@ -82,6 +87,12 @@ export async function GET(
       )
     }
 
+    const cost =
+      assessmentResult.ai_generation_cost !== null &&
+      assessmentResult.ai_generation_cost !== undefined
+        ? Number(assessmentResult.ai_generation_cost)
+        : null
+
     return NextResponse.json({
       assessmentResultId: assessmentResult.id,
       assessmentId: assessmentResult.assessment_id,
@@ -104,6 +115,12 @@ export async function GET(
       })(),
       completedAt: assessmentResult.assessments?.completed_at ?? null,
       aiReport: assessmentResult.ai_report,
+      aiProcessingStatus: assessmentResult.ai_processing_status,
+      aiProcessingProgress: assessmentResult.ai_processing_progress ?? 0,
+      aiGenerationCost: cost,
+      aiTokensUsed: assessmentResult.ai_tokens_used ?? 0,
+      aiImagesGenerated: assessmentResult.ai_images_generated ?? 0,
+      canViewCost: profile?.role === 'admin',
       redFlags: (assessmentResult.red_flags as string[] | null) ?? [],
       redFlagCount: assessmentResult.red_flag_count ?? 0,
       physicianNotes: assessmentResult.physician_notes ?? null,
@@ -119,10 +136,7 @@ export async function GET(
   } catch (error) {
     console.error('[physician assessment detail] unexpected error', error)
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : 'Unable to load assessment details.',
-      },
+      { error: 'Unable to load assessment details.' },
       { status: 500 }
     )
   }

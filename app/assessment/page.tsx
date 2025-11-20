@@ -6,8 +6,10 @@ import { useRouter } from 'next/navigation'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import * as z from 'zod'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Header } from '@/components/header'
 import {
   Card,
   CardContent,
@@ -90,27 +92,17 @@ export default function AssessmentLandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 px-6 py-20 text-white">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
-        <Button
-          variant="ghost"
-          className="w-fit rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/20"
-          asChild
-        >
-          <Link href="/">← Back to Home</Link>
-        </Button>
-
-        <Card className="overflow-hidden border-0 bg-white/95 text-slate-900 shadow-2xl backdrop-blur-md">
-          <div className="h-2 w-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
-          <CardHeader className="space-y-3 text-center">
-            <CardTitle className="text-4xl font-semibold text-slate-950">
-              Tell us about your child
-            </CardTitle>
-            <CardDescription className="text-base text-slate-600">
+    <div className="min-h-screen bg-orange-50/30">
+      <Header userType="guest" currentPath="/assessment" />
+      <div className="container mx-auto px-4 max-w-3xl py-8">
+        <Card className="p-8 md:p-10 shadow-lg border-2">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl mb-3">Tell us about your child</h2>
+            <p className="text-muted-foreground">
               This helps us show age-appropriate questions tailored to your family.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-8 pb-10">
+            </p>
+          </div>
+          <div>
             <Form {...form}>
               <form
                 onSubmit={form.handleSubmit(onSubmit)}
@@ -126,7 +118,7 @@ export default function AssessmentLandingPage() {
                       <FormControl>
                         <Input
                           placeholder="Enter your child's name"
-                          className="h-12 rounded-xl border border-slate-200 bg-white/90 px-4 text-slate-900 shadow-sm transition duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200"
+                          className="h-12 mt-2"
                           {...field}
                         />
                       </FormControl>
@@ -135,7 +127,7 @@ export default function AssessmentLandingPage() {
                   )}
                 />
 
-                <div className="grid gap-6 sm:grid-cols-2">
+                <div className="grid gap-6 md:grid-cols-2">
                   <FormField
                     control={form.control}
                     name="dateOfBirth"
@@ -146,7 +138,7 @@ export default function AssessmentLandingPage() {
                           <Input
                             type="date"
                             max={new Date().toISOString().split('T')[0]}
-                            className="h-12 rounded-xl border border-slate-200 bg-white/90 px-4 text-slate-900 shadow-sm transition duration-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-200"
+                            className="h-12 mt-2"
                             {...field}
                           />
                         </FormControl>
@@ -163,16 +155,12 @@ export default function AssessmentLandingPage() {
                         <FormLabel>Focus Area</FormLabel>
                         <FormControl>
                           <Select onValueChange={field.onChange} value={field.value}>
-                            <SelectTrigger className="h-12 rounded-xl border border-slate-200 bg-white/90 px-4 text-left text-slate-900 shadow-sm transition duration-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-200">
+                            <SelectTrigger className="h-12 mt-2">
                               <SelectValue placeholder="Select a focus area" />
                             </SelectTrigger>
-                            <SelectContent className="rounded-xl border border-slate-200 bg-white/95 text-slate-900 shadow-xl">
+                            <SelectContent>
                               {focusOptions.map((option) => (
-                                <SelectItem
-                                  key={option}
-                                  value={option}
-                                  className="rounded-lg px-3 py-2 text-sm transition hover:bg-purple-50 focus:bg-purple-100"
-                                >
+                                <SelectItem key={option} value={option}>
                                   {option}
                                 </SelectItem>
                               ))}
@@ -185,18 +173,28 @@ export default function AssessmentLandingPage() {
                   />
                 </div>
 
-                <div className="pt-4">
+                <div className="flex justify-between mt-8 pt-6 border-t border-border">
+                  <Button
+                    variant="outline"
+                    asChild
+                  >
+                    <Link href="/">
+                      <ArrowLeft className="w-4 h-4 mr-2" />
+                      Back to Home
+                    </Link>
+                  </Button>
+
                   <Button
                     type="submit"
-                    size="lg"
-                    className="w-full rounded-xl bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500 py-6 text-base font-semibold text-white shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
                     Continue to Questions
+                    <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 </div>
               </form>
             </Form>
-          </CardContent>
+          </div>
         </Card>
       </div>
     </div>

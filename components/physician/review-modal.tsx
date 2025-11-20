@@ -1,17 +1,25 @@
 'use client'
 
-import { ReactNode, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertCircle,
+  Baby,
   CalendarDays,
   CheckCircle2,
-  ClipboardCheck,
   Clock,
-  FlagTriangleRight,
+  FileText,
+  Flag,
   Loader2,
   Mail,
+  MessageSquare,
+  RefreshCw,
+  Smile,
   UserRound,
   XCircle,
+  Zap,
 } from 'lucide-react'
+
+import { toast } from 'sonner'
 
 import {
   Dialog,
@@ -21,9 +29,27 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Progress } from '@/components/ui/progress'
 
 type ReviewAction = 'approve' | 'needs_revision' | 'rejected'
+
+type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
+type StorybookPage = {
+  page_number?: number
+  milestone_code?: string
+  display_text?: string
+  narrative_text?: string
+  visual_flag?: string
+  image_url?: string
+}
+
+type StorybookReport = {
+  pages?: StorybookPage[]
+}
 
 export type AssessmentDetail = {
   assessmentResultId: string
@@ -34,6 +60,12 @@ export type AssessmentDetail = {
   childAgeMonths?: number | null
   completedAt: string | null
   aiReport: string | null
+  aiProcessingStatus?: ProcessingStatus | null
+  aiProcessingProgress?: number | null
+  aiGenerationCost?: number | null
+  aiTokensUsed?: number | null
+  aiImagesGenerated?: number | null
+  canViewCost?: boolean
   redFlags: string[]
   redFlagCount: number
   responses: Array<{
@@ -56,45 +88,39 @@ type PhysicianReviewModalProps = {
 }
 
 const responseColors: Record<string, string> = {
-  yes: 'bg-emerald-100 text-emerald-700',
-  no: 'bg-rose-100 text-rose-700',
-  sometimes: 'bg-amber-100 text-amber-700',
-  not_sure: 'bg-slate-200 text-slate-700',
+  yes: 'bg-success/10 text-success border-success/20',
+  no: 'bg-destructive/10 text-destructive border-destructive/20',
+  sometimes: 'bg-warning/10 text-warning border-warning/20',
+  not_sure: 'bg-muted text-muted-foreground border-border',
 }
 
-function InfoPill({ icon, children }: { icon: ReactNode; children: ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-1 text-sm text-slate-600 shadow-sm ring-1 ring-slate-100">
-      <span className="text-indigo-500">{icon}</span>
-      {children}
-    </span>
-  )
+const getCategoryIcon = (category: string) => {
+  const icons: Record<string, any> = {
+    'Social-Emotional': Smile,
+    'Language/Communication': MessageSquare,
+    'Motor Skills': Zap,
+    'Motor': Zap,
+    'Cognitive': Baby,
+  }
+  return icons[category] || Baby
 }
 
-function SectionShell({
-  title,
-  description,
-  children,
-  accent = 'default',
-}: {
-  title: string
-  description?: string
-  children: ReactNode
-  accent?: 'default' | 'warning'
-}) {
-  const palette =
-    accent === 'warning' ? 'border-rose-200 bg-rose-50/80' : 'border-slate-200 bg-white/95'
+const getCategoryColor = (category: string) => {
+  const colors: Record<string, string> = {
+    'Social-Emotional': 'text-primary bg-primary/10',
+    'Language/Communication': 'text-secondary-accent bg-secondary-accent/10',
+    'Motor Skills': 'text-warning bg-warning/10',
+    'Motor': 'text-warning bg-warning/10',
+    'Cognitive': 'text-success bg-success/10',
+  }
+  return colors[category] || 'text-muted bg-muted/10'
+}
 
+const getResponseValueBadge = (value: string) => {
   return (
-    <section className={`rounded-3xl border p-6 shadow-xl ${palette}`}>
-      <div className="space-y-1">
-        <h4 className="text-lg font-semibold text-slate-900">{title}</h4>
-        {description ? (
-          <p className="text-sm text-slate-500">{description}</p>
-        ) : null}
-      </div>
-      {children}
-    </section>
+    <Badge className={responseColors[value] || responseColors.not_sure}>
+      {value.replace('_', ' ').toUpperCase()}
+    </Badge>
   )
 }
 
@@ -107,6 +133,20 @@ export function PhysicianReviewModal({
 }: PhysicianReviewModalProps) {
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState<ReviewAction | null>(null)
+  const [overrideStatus, setOverrideStatus] = useState<ProcessingStatus | null>(null)
+  const [retrying, setRetrying] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
+
+  useEffect(() => {
+    setOverrideStatus(null)
+    setRetrying(false)
+  }, [assessment?.assessmentResultId])
+
+  const effectiveStatus = overrideStatus ?? assessment?.aiProcessingStatus ?? null
+  const effectiveProgress =
+    overrideStatus === 'processing'
+      ? 0
+      : Math.max(0, Math.min(assessment?.aiProcessingProgress ?? 0, 100))
 
   const parsedReport = useMemo(() => {
     if (!assessment?.aiReport) return null
@@ -116,6 +156,52 @@ export function PhysicianReviewModal({
       return assessment.aiReport
     }
   }, [assessment?.aiReport])
+
+
+  const handleRegenerateStorybook = async () => {
+    if (!assessment) return
+    setRegenerating(true)
+    // Reuse the full AI generation pipeline (images + PDFs)
+    try {
+      await handleRetryAiGeneration()
+      toast.success('Regeneration started (images + PDFs).')
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  const handleRetryAiGeneration = async () => {
+    if (!assessment) return
+    setRetrying(true)
+    setOverrideStatus('processing')
+
+    try {
+      const response = await fetch(
+        `/api/physician/assessment-results/${assessment.assessmentResultId}/retry-ai`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }
+      )
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        throw new Error(payload?.error ?? 'Failed to restart AI generation.')
+      }
+
+      toast.success('AI regeneration started. Refreshing shortly...')
+      setTimeout(() => {
+        window.location.reload()
+      }, 1200)
+    } catch (error) {
+      setOverrideStatus('failed')
+      toast.error(
+        error instanceof Error ? error.message : 'Unable to retry AI generation.'
+      )
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   const handleSubmit = async (action: ReviewAction) => {
     if (!assessment) return
@@ -132,228 +218,384 @@ export function PhysicianReviewModal({
 
   return (
     <Dialog open={open} onOpenChange={(state) => (!state ? onClose() : undefined)}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-        <DialogHeader className="space-y-1 text-left">
-          <DialogTitle className="text-2xl font-semibold text-slate-900">
-            Review Assessment
-          </DialogTitle>
-          <p className="text-sm text-slate-500">
-            Confirm red flags, add physician guidance, and update the family&apos;s plan.
-          </p>
-        </DialogHeader>
+      <DialogContent className="max-w-6xl max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
+        <div className="px-6 pt-6 pb-4 border-b border-border flex-shrink-0">
+          <DialogHeader>
+            <DialogTitle>Review Assessment - {assessment?.assessmentId ?? ''}</DialogTitle>
+            <p className="text-sm text-muted-foreground mt-2">
+              Review the assessment details, AI-generated storybook, and provide feedback.
+            </p>
+          </DialogHeader>
+        </div>
 
-        {assessment ? (
-          <div className="space-y-8 text-left">
-            <section className="rounded-3xl border border-slate-200 bg-white/95 shadow-xl">
-              <div className="flex flex-col gap-6 rounded-t-3xl bg-slate-50/80 p-6 md:flex-row md:items-start md:justify-between">
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <h3 className="text-xl font-semibold text-slate-900">
-                      {assessment.childName}
-                    </h3>
-                    <p className="text-sm text-slate-600">
-                      Submitted{' '}
-                      {assessment.completedAt
-                        ? new Date(assessment.completedAt).toLocaleString()
-                        : '—'}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <InfoPill icon={<UserRound className="h-4 w-4" />}>
-                      {assessment.parentName ?? 'Parent'}
-                    </InfoPill>
-                    {assessment.parentEmail ? (
-                      <InfoPill icon={<Mail className="h-4 w-4" />}>
-                        {assessment.parentEmail}
-                      </InfoPill>
-                    ) : null}
-                    {typeof assessment.childAgeMonths === 'number' ? (
-                      <InfoPill icon={<Clock className="h-4 w-4" />}>
-                        Age {assessment.childAgeMonths} months
-                      </InfoPill>
-                    ) : null}
-                    {assessment.completedAt ? (
-                      <InfoPill icon={<CalendarDays className="h-4 w-4" />}>
-                        Completed {new Date(assessment.completedAt).toLocaleDateString()}
-                      </InfoPill>
-                    ) : null}
-                  </div>
-                </div>
-                <Badge className="h-fit rounded-full bg-rose-100 px-4 py-2 text-rose-700">
-                  <FlagTriangleRight className="mr-2 h-4 w-4" />
-                  {assessment.redFlagCount} red flag
-                  {assessment.redFlagCount === 1 ? '' : 's'}
+        <div className="flex-1 overflow-y-auto px-6">
+          {loading && !assessment ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+              <p className="text-muted-foreground">Loading assessment details...</p>
+            </div>
+          ) : assessment ? (
+            <div className="space-y-6 py-6">
+            {/* Assessment Overview */}
+            <Card className="p-6 bg-secondary/30">
+              <h3 className="text-lg mb-4">Assessment Overview</h3>
+              
+              {/* Info Pills */}
+              <div className="flex flex-wrap gap-2 mb-6">
+                <Badge variant="outline" className="bg-background px-3 py-1.5">
+                  <UserRound className="w-3.5 h-3.5 mr-2" />
+                  {assessment.parentName ?? 'Parent'}
                 </Badge>
+                {assessment.parentEmail ? (
+                  <Badge variant="outline" className="bg-background px-3 py-1.5">
+                    <Mail className="w-3.5 h-3.5 mr-2" />
+                    {assessment.parentEmail}
+                  </Badge>
+                ) : null}
+                {typeof assessment.childAgeMonths === 'number' ? (
+                  <Badge variant="outline" className="bg-background px-3 py-1.5">
+                    <Clock className="w-3.5 h-3.5 mr-2" />
+                    {assessment.childAgeMonths} months
+                  </Badge>
+                ) : null}
+                {assessment.completedAt ? (
+                  <Badge variant="outline" className="bg-background px-3 py-1.5">
+                    <CalendarDays className="w-3.5 h-3.5 mr-2" />
+                    {new Date(assessment.completedAt).toLocaleDateString()}
+                  </Badge>
+                ) : null}
               </div>
-              <div className="grid gap-4 px-6 pb-6 pt-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Assessment ID
-                  </p>
-                  <p className="rounded-xl bg-white px-4 py-3 text-sm font-mono text-slate-700 shadow-inner ring-1 ring-slate-100">
-                    {assessment.assessmentId}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Review Status
-                  </p>
-                  <p className="rounded-xl bg-white px-4 py-3 text-sm text-slate-700 shadow-inner ring-1 ring-slate-100">
-                    Awaiting physician review
-                  </p>
-                </div>
-              </div>
-            </section>
 
-            <SectionShell
-              title="AI Report"
-              description="Automated summary of milestone performance."
-            >
-              {parsedReport ? (
+              {/* Fields Grid */}
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm">
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground mb-1">Child Name</p>
+                  <p className="font-medium">{assessment.childName}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground mb-1">Age</p>
+                  <p className="font-medium">
+                    {typeof assessment.childAgeMonths === 'number'
+                      ? `${assessment.childAgeMonths} months`
+                      : '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground mb-1">Parent Name</p>
+                  <p className="font-medium">{assessment.parentName ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground mb-1">Parent Email</p>
+                  <p className="font-medium">{assessment.parentEmail ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground mb-1">Submission Date</p>
+                  <p className="font-medium">
+                    {assessment.completedAt
+                      ? new Date(assessment.completedAt).toLocaleString()
+                      : '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground mb-1">Red Flags</p>
+                  <p className="font-medium flex items-center gap-2">
+                    {assessment.redFlagCount > 0 ? (
+                      <>
+                        <Flag className="w-4 h-4 text-destructive" />
+                        {assessment.redFlagCount}
+                      </>
+                    ) : (
+                      <span className="text-success">None</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Bottom Grid - Assessment ID and Review Status */}
+              <div className="grid md:grid-cols-2 gap-6 text-sm mt-6 pt-6 border-t border-border">
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground mb-1">Assessment ID</p>
+                  <p className="font-mono font-medium">{assessment.assessmentId}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground mb-1">Review Status</p>
+                  <div className="font-medium">
+                    <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">
+                      Awaiting physician review
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* AI Report Section */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  AI-Generated Storybook Report
+                </h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRegenerateStorybook}
+                  disabled={regenerating || reviewDisabled}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Regenerate Storybook
+                </Button>
+              </div>
+
+              {effectiveStatus === 'completed' && parsedReport ? (
                 typeof parsedReport === 'string' ? (
-                  <p className="whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 text-sm text-slate-700 shadow-inner">
+                  <p className="whitespace-pre-wrap rounded-2xl bg-muted/30 p-4 text-sm text-foreground">
                     {parsedReport}
                   </p>
+                ) : Array.isArray((parsedReport as StorybookReport).pages) ? (
+                  <div className="space-y-4">
+                    {/* Storybook Pages */}
+                    {(parsedReport as StorybookReport).pages?.map((page: StorybookPage) => (
+                      <Card key={page.page_number ?? Math.random()} className="p-6">
+                        <div className="flex gap-6">
+                          {page.image_url ? (
+                            <img
+                              src={page.image_url}
+                              alt={`Page ${page.page_number}`}
+                              className="w-40 h-30 rounded-lg object-cover flex-shrink-0"
+                              style={{ maxHeight: '300px' }}
+                            />
+                          ) : null}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-3">
+                              <Badge variant="secondary">Page {page.page_number ?? '-'}</Badge>
+                              {page.milestone_code ? (
+                                <Badge variant="outline">{page.milestone_code}</Badge>
+                              ) : null}
+                              {page.visual_flag ? (
+                                <Badge className="bg-destructive/10 text-destructive border-destructive/20">
+                                  <Flag className="w-3 h-3 mr-1" />
+                                  Red Flag
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <h4 className="text-lg mb-2">{page.display_text ?? 'Untitled'}</h4>
+                            {page.narrative_text ? (
+                              <p className="text-muted-foreground">{page.narrative_text}</p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+
+                    {/* Cost Metrics */}
+                    {assessment?.canViewCost && typeof assessment?.aiGenerationCost === 'number' ? (
+                      <Card className="p-4 bg-muted/30">
+                        <p className="text-xs text-muted-foreground">
+                          Generation Cost: ${assessment.aiGenerationCost.toFixed(2)} • 
+                          Tokens: {assessment.aiTokensUsed ?? 0} • 
+                          Images: {assessment.aiImagesGenerated ?? 0}
+                        </p>
+                      </Card>
+                    ) : null}
+                  </div>
                 ) : (
-                  <pre className="max-h-60 overflow-y-auto rounded-2xl bg-slate-50 p-4 text-sm text-slate-700 shadow-inner">
+                  <pre className="max-h-60 overflow-y-auto rounded-2xl bg-muted/30 p-4 text-sm text-foreground">
                     {JSON.stringify(parsedReport, null, 2)}
                   </pre>
                 )
+              ) : effectiveStatus === 'processing' ? (
+                <Card className="p-8 text-center">
+                  <Loader2 className="w-12 h-12 text-primary mx-auto mb-4 animate-spin" />
+                  <p className="text-lg mb-2">Generating AI Report...</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {effectiveProgress}% complete
+                  </p>
+                  <Progress value={effectiveProgress} className="h-2" />
+                </Card>
+              ) : effectiveStatus === 'failed' ? (
+                <Card className="p-8 text-center border-destructive/20">
+                  <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+                  <p className="text-lg mb-2">AI Generation Failed</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    There was an error generating the report. Please try again.
+                  </p>
+                  <Button variant="outline" onClick={handleRetryAiGeneration} disabled={retrying}>
+                    {retrying ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                    )}
+                    Retry AI Generation
+                  </Button>
+                </Card>
+              ) : effectiveStatus === 'pending' ? (
+                <Card className="p-8 text-center">
+                  <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-lg mb-2">AI Report Not Started</p>
+                  <Button
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    onClick={handleRetryAiGeneration}
+                    disabled={retrying}
+                  >
+                    {retrying ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                    )}
+                    Start AI Generation
+                  </Button>
+                </Card>
               ) : (
-                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                  No AI report available for this assessment.
-                </p>
+                <Card className="p-8 text-center">
+                  <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-sm text-muted-foreground">
+                    No AI report available for this assessment.
+                  </p>
+                </Card>
               )}
-            </SectionShell>
+            </div>
 
-            {assessment.redFlags.length ? (
-              <SectionShell
-                title="Red Flags"
-                description="Conversations to prioritize with the family."
-                accent="warning"
-              >
-                <ul className="space-y-2">
-                  {assessment.redFlags.map((flag, index) => (
-                    <li
-                      key={`${flag}-${index}`}
-                      className="rounded-2xl bg-white px-4 py-3 text-sm text-rose-700 shadow-sm ring-1 ring-rose-100/60"
-                    >
-                      {flag || 'Flag detail unavailable'}
-                    </li>
-                  ))}
-                </ul>
-              </SectionShell>
+            {/* Red Flags Section */}
+            {assessment.redFlags.length > 0 ? (
+              <div>
+                <h3 className="text-lg flex items-center gap-2 mb-4">
+                  <Flag className="w-5 h-5 text-destructive" />
+                  Red Flags ({assessment.redFlagCount})
+                </h3>
+                <Card className="p-6 border-destructive/20 bg-destructive/5">
+                  <ul className="space-y-3">
+                    {assessment.redFlags.map((flag, index) => (
+                      <li key={`${flag}-${index}`} className="flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                        <span>{flag || 'Flag detail unavailable'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              </div>
             ) : null}
 
-            <SectionShell
-              title="Milestone Responses"
-              description="Review caregiver inputs by developmental category."
-            >
-              <div className="flex items-center justify-between gap-3">
-                <Badge className="rounded-full bg-indigo-100 px-3 py-1 text-indigo-700">
-                  <ClipboardCheck className="mr-2 h-4 w-4" />
-                  {assessment.responses.length} items
-                </Badge>
+            {/* Milestone Responses Section */}
+            <div>
+              <h3 className="text-lg mb-4">
+                Milestone Responses ({assessment.responses.length} responses)
+              </h3>
+              <div className="space-y-4">
+                {['Social-Emotional', 'Language/Communication', 'Motor Skills', 'Motor', 'Cognitive'].map((category) => {
+                  const categoryResponses = assessment.responses.filter(
+                    (r) => r.category === category
+                  )
+                  
+                  if (categoryResponses.length === 0) return null
+                  
+                  const Icon = getCategoryIcon(category)
+                  
+                  return (
+                    <Card key={category} className="p-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getCategoryColor(category)}`}>
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <h4 className="text-lg">{category}</h4>
+                      </div>
+                      <div className="space-y-4">
+                        {categoryResponses.map((response) => (
+                          <div key={response.id} className="border-l-2 border-border pl-4">
+                            <div className="flex items-start justify-between gap-4 mb-2">
+                              <p className="text-sm font-medium">{response.question}</p>
+                              {getResponseValueBadge(response.response)}
+                            </div>
+                            {response.notes ? (
+                              <p className="text-sm text-muted-foreground italic">
+                                Note: {response.notes}
+                              </p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  )
+                })}
               </div>
-              <div className="space-y-3">
-                {assessment.responses.map((response) => (
-                  <div
-                    key={response.id}
-                    className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <span className="text-sm font-semibold text-slate-700">
-                        {response.category}
-                      </span>
-                      <Badge className={responseColors[response.response] ?? 'bg-slate-200 text-slate-700'}>
-                        {response.response.replace('_', ' ')}
-                      </Badge>
-                    </div>
-                    <p className="mt-2 text-sm text-slate-800">{response.question}</p>
-                    {response.notes ? (
-                      <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                        Notes: {response.notes}
-                      </p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </SectionShell>
+            </div>
 
-            <SectionShell
-              title="Physician Notes"
-              description="Document findings, recommendations, and next steps shared with the family."
-            >
+            {/* Physician Notes Section */}
+            <div>
+              <Label htmlFor="physician-notes" className="text-lg mb-4 block">
+                Physician Notes & Recommendations
+              </Label>
               <Textarea
+                id="physician-notes"
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
-                placeholder="Add clinical observations or follow-up recommendations..."
-                className="min-h-[140px] rounded-2xl border border-slate-200 bg-white text-sm text-slate-700 shadow-inner focus-visible:ring-2 focus-visible:ring-indigo-400"
+                placeholder="Document your clinical observations, recommendations, and guidance for the parent. Include any developmental concerns, suggested activities, or follow-up actions."
+                className="min-h-32"
               />
-            </SectionShell>
+            </div>
 
-            <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-100"
-                disabled={reviewDisabled}
-              >
-                Close
-              </Button>
-              <div className="flex flex-wrap items-center gap-3">
+            {/* Review Actions */}
+            <Card className="p-6 bg-secondary/30">
+              <h3 className="text-lg mb-4">Review Actions</h3>
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <Button
-                  type="button"
-                  onClick={() => handleSubmit('needs_revision')}
+                  variant="outline"
+                  onClick={onClose}
                   disabled={reviewDisabled}
-                  className="rounded-xl bg-amber-100 text-amber-700 hover:bg-amber-200"
                 >
-                  {submitting === 'needs_revision' ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <XCircle className="mr-2 h-4 w-4" />
-                  )}
-                  Request Revision
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Close
                 </Button>
                 <Button
-                  type="button"
+                  variant="outline"
+                  className="border-destructive/30 text-destructive hover:bg-destructive/10"
                   onClick={() => handleSubmit('rejected')}
                   disabled={reviewDisabled}
-                  className="rounded-xl bg-rose-100 text-rose-700 hover:bg-rose-200"
                 >
                   {submitting === 'rejected' ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
-                    <XCircle className="mr-2 h-4 w-4" />
+                    <XCircle className="w-4 h-4 mr-2" />
                   )}
                   Reject
                 </Button>
                 <Button
-                  type="button"
+                  variant="outline"
+                  className="border-warning/30 text-warning hover:bg-warning/10"
+                  onClick={() => handleSubmit('needs_revision')}
+                  disabled={reviewDisabled}
+                >
+                  {submitting === 'needs_revision' ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 mr-2" />
+                  )}
+                  Request Revision
+                </Button>
+                <Button
+                  className="bg-success hover:bg-success/90 text-white"
                   onClick={() => handleSubmit('approve')}
                   disabled={reviewDisabled}
-                  className="rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 text-white shadow-lg hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500"
                 >
                   {submitting === 'approve' ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
                   )}
-                  Approve &amp; Share with Parent
+                  Approve & Share
                 </Button>
               </div>
+            </Card>
             </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center py-20">
-            {loading ? (
-              <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-            ) : (
-              <p className="text-sm text-slate-600">Select an assessment to review.</p>
-            )}
-          </div>
-        )}
+          ) : (
+            <div className="flex items-center justify-center py-20">
+              {loading ? (
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              ) : (
+                <p className="text-sm text-muted-foreground">Select an assessment to review.</p>
+              )}
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   )

@@ -1,219 +1,401 @@
+'use client'
 
 import Link from 'next/link'
+import { motion } from 'framer-motion'
 
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Header } from '@/components/header'
+import { ImageWithFallback } from '@/components/figma/image-with-fallback'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import {
-  Brain,
-  Clock,
-  FileText,
-  ShieldCheck,
+  ArrowRight,
+  Baby,
+  BookOpen,
+  Shield,
+  CheckCircle,
   Sparkles,
-  UserCheck,
-  UserPlus,
+  Heart,
 } from 'lucide-react'
-
-const features = [
-  {
-    title: 'Quick & Easy',
-    description: 'Complete the assessment in just 5-10 minutes—no login required.',
-    icon: Clock,
-    accent: 'bg-blue-100 text-blue-600 border-t-blue-500',
-  },
-  {
-    title: 'AI-Powered Insights',
-    description:
-      "Receive a personalized storybook crafted from your child's developmental journey.",
-    icon: Brain,
-    accent: 'bg-purple-100 text-purple-600 border-t-purple-500',
-  },
-  {
-    title: 'Expert Review',
-    description:
-      'Every result is reviewed by qualified physicians before reaching your dashboard.',
-    icon: UserCheck,
-    accent: 'bg-green-100 text-green-600 border-t-green-500',
-  },
-]
-
-const steps = [
-  {
-    title: 'Answer Questions',
-    description: 'Share insights about your child—it only takes 5-10 minutes.',
-    icon: FileText,
-  },
-  {
-    title: 'Create an Account',
-    description: 'Save progress and access your child’s developmental history anytime.',
-    icon: UserPlus,
-  },
-  {
-    title: 'AI Storybook',
-    description: 'Our AI crafts a personalized story to celebrate every milestone.',
-    icon: Sparkles,
-  },
-  {
-    title: 'Physician Review',
-    description: 'A licensed physician reviews and approves your results for accuracy.',
-    icon: ShieldCheck,
-  },
-]
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-white text-slate-900">
-      <main className="flex flex-col gap-24">
-        <section className="relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 px-6 py-24 text-center text-white sm:px-10">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.2),_transparent_40%)]" />
-          <div className="relative w-full max-w-5xl animate-fade-in space-y-10">
-            <div className="flex flex-col items-center gap-6">
-              <div className="flex items-center justify-center rounded-full bg-white/15 p-4 shadow-xl backdrop-blur">
-                <Sparkles className="h-10 w-10 text-yellow-200" />
-              </div>
-              <span className="rounded-full bg-white/15 px-5 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-white/80 shadow-lg backdrop-blur">
-                Developmental Milestones Reimagined
-              </span>
-            </div>
-            <div className="space-y-6">
-              <h1 className="text-balance text-5xl font-bold leading-tight drop-shadow-xl sm:text-6xl md:text-7xl">
-                Welcome to FirstSign
-              </h1>
-              <p className="mx-auto max-w-2xl text-balance text-lg text-gray-200 sm:text-xl">
-                Track developmental milestones, uncover AI-powered insights, and receive
-                physician-approved guidance—all through one modern experience.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-4">
-              <Button
-                size="lg"
-                className="group transform bg-white px-8 py-6 text-base font-semibold text-blue-600 shadow-2xl transition-all duration-300 hover:-translate-y-1 hover:scale-105 hover:bg-white"
-                asChild
-              >
-                <Link href="/assessment">Start Free Assessment</Link>
-              </Button>
-              <Button
-                size="lg"
-                variant="secondary"
-                className="border-2 border-white/80 bg-transparent px-8 py-6 text-base font-semibold text-white shadow-xl transition-all duration-300 hover:-translate-y-1 hover:scale-105 hover:border-white hover:bg-white/10"
-                asChild
-              >
-                <Link href="/login">Login</Link>
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-white px-6 py-20 sm:px-10">
-          <div className="mx-auto max-w-6xl space-y-12">
-            <div className="space-y-4 text-center">
-              <h2 className="text-3xl font-semibold text-slate-950 sm:text-4xl">
-                Why Families Choose FirstSign
-              </h2>
-              <p className="mx-auto max-w-2xl text-lg text-slate-600">
-                Thoughtfully designed tools that help families understand and support
-                their child’s unique development journey.
-              </p>
-            </div>
-            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-              {features.map((feature) => {
-                const Icon = feature.icon
-                const [iconBg, iconText, topBorder] = feature.accent.split(' ')
-                return (
-                  <Card
-                    key={feature.title}
-                    className={`group relative h-full transform border-t-4 ${topBorder} rounded-2xl bg-white/90 p-6 shadow-xl transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl`}
-                  >
-                    <CardHeader className="space-y-6 pb-4">
-                      <div
-                        className={`self-start rounded-2xl p-3 shadow ${iconBg} ${iconText}`}
-                      >
-                        <Icon className="h-8 w-8" />
-                      </div>
-                      <CardTitle className="text-2xl font-semibold text-slate-900">
-                        {feature.title}
-                      </CardTitle>
-                      <CardDescription className="text-base text-slate-600">
-                        {feature.description}
-                      </CardDescription>
-                    </CardHeader>
-                  </Card>
-                )
-              })}
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-gradient-to-br from-gray-50 via-white to-blue-50 px-6 py-20 sm:px-10">
-          <div className="mx-auto max-w-6xl space-y-12">
-            <div className="space-y-4 text-center">
-              <h2 className="text-3xl font-semibold text-slate-950 sm:text-4xl">
-                How It Works
-              </h2>
-              <p className="mx-auto max-w-2xl text-lg text-slate-600">
-                Start with a simple assessment and follow a guided path to detailed,
-                physician-backed insights.
-              </p>
-            </div>
-            <div className="grid gap-8 md:grid-cols-2">
-              {steps.map((step, index) => {
-                const Icon = step.icon
-                return (
-                  <Card
-                    key={step.title}
-                    className="group relative flex h-full flex-col gap-6 rounded-2xl border border-blue-100 bg-white p-8 shadow-lg transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg">
-                        <span className="text-xl font-semibold">{index + 1}</span>
-                      </div>
-                      <div className="rounded-full bg-blue-50 p-3 text-blue-600">
-                        <Icon className="h-6 w-6" />
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      <CardTitle className="text-2xl font-semibold text-slate-900">
-                        {step.title}
-                      </CardTitle>
-                      <CardContent className="p-0 text-base text-slate-600">
-                        {step.description}
-                      </CardContent>
-                    </div>
-                  </Card>
-                )
-              })}
-            </div>
-          </div>
-        </section>
-      </main>
-
-      <footer className="relative mt-10 bg-gray-900 text-gray-300">
-        <div className="h-1 w-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10 sm:px-10 md:flex-row md:items-center md:justify-between">
-          <p className="text-sm">
-            © {new Date().getFullYear()} FirstSign. All rights reserved.
-          </p>
-          <nav className="flex flex-wrap gap-6 text-sm font-medium">
-            <Link href="/about" className="transition-colors duration-200 hover:text-white">
-              About
-            </Link>
-            <Link
-              href="/privacy"
-              className="transition-colors duration-200 hover:text-white"
-            >
-              Privacy
-            </Link>
-            <Link href="/terms" className="transition-colors duration-200 hover:text-white">
-              Terms
-            </Link>
-          </nav>
+    <div className="min-h-screen bg-background">
+      <Header userType="guest" currentPath="/" />
+      
+      {/* Hero Section with Background Pattern */}
+      <section className="relative py-16 md:py-24 lg:py-32 overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute top-10 left-10 w-32 h-32 rounded-full bg-primary/20 blur-3xl"></div>
+          <div className="absolute top-40 right-20 w-48 h-48 rounded-full bg-warning/20 blur-3xl"></div>
+          <div className="absolute bottom-20 left-1/3 w-40 h-40 rounded-full bg-secondary-accent/20 blur-3xl"></div>
         </div>
-      </footer>
+        
+        <div className="container mx-auto px-4 md:px-6 max-w-7xl relative z-10">
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+            {/* Left: Text Content */}
+            <motion.div 
+              className="space-y-6 lg:space-y-8"
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              <motion.div 
+                className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full shadow-sm"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2, duration: 0.5 }}
+              >
+                <Heart className="w-4 h-4" />
+                <span>Trusted by 10,000+ parents</span>
+              </motion.div>
+              
+              <motion.h1 
+                className="text-4xl md:text-5xl lg:text-6xl leading-tight"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 0.6 }}
+              >
+                Is your little one developing on track?
+              </motion.h1>
+              
+              <motion.p 
+                className="text-lg md:text-xl text-muted-foreground max-w-xl"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4, duration: 0.6 }}
+              >
+                Get peace of mind with our quick developmental assessment. Receive a personalized 
+                storybook and expert pediatrician feedback—all completely free.
+              </motion.p>
+              
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5, duration: 0.6 }}
+              >
+                <Button 
+                  size="lg" 
+                  asChild
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground h-12 md:h-14 px-6 md:px-8 shadow-lg hover:shadow-xl transition-all"
+                >
+                  <Link href="/assessment">
+                    Start Free Assessment
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </Link>
+                </Button>
+              </motion.div>
+              
+              <motion.div 
+                className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:gap-6 text-muted-foreground"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.6, duration: 0.6 }}
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span>No signup required</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span>Just 10 minutes</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
+                  <span>100% free</span>
+                </div>
+              </motion.div>
+            </motion.div>
+            
+            {/* Right: Hero Image */}
+            <motion.div 
+              className="relative order-first lg:order-last"
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
+              <div className="absolute -inset-4 bg-gradient-to-br from-primary/20 to-warning/20 rounded-3xl blur-2xl"></div>
+              <div className="relative rounded-3xl shadow-2xl overflow-hidden h-[400px] md:h-[500px]">
+                <ImageWithFallback
+                  src="https://images.unsplash.com/flagged/photo-1558411158-9d2bc0cea41c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjdXRlJTIwYmFieSUyMHNtaWxpbmd8ZW58MXx8fHwxNzYzNDQzNDY2fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
+                  alt="Happy baby developmental milestone"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* What You'll Get Section */}
+      <section className="py-20 bg-muted/30">
+        <div className="container mx-auto px-4 max-w-6xl">
+          <motion.div 
+            className="text-center mb-16"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.6 }}
+          >
+            <h2 className="text-3xl md:text-4xl mb-4">What you'll get</h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Everything you need to track your child's development
+            </p>
+          </motion.div>
+          
+          <div className="grid md:grid-cols-3 gap-8">
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+            >
+              <Card className="p-8 border-2 hover:border-primary/30 transition-all text-center shadow-lg hover:shadow-xl bg-white h-full">
+                <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-md">
+                  <Baby className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="text-xl mb-4">Milestone Assessment</h3>
+                <p className="text-muted-foreground">
+                  Simple questions covering social, language, motor, and cognitive development for your child's age
+                </p>
+              </Card>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
+              <Card className="p-8 border-2 hover:border-primary/30 transition-all text-center shadow-lg hover:shadow-xl bg-white h-full">
+                <div className="w-16 h-16 bg-secondary-accent/10 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-md">
+                  <BookOpen className="w-8 h-8 text-secondary-accent" />
+                </div>
+                <h3 className="text-xl mb-4">Personalized Storybook</h3>
+                <p className="text-muted-foreground">
+                  A beautiful PDF storybook celebrating your child's unique journey and achievements
+                </p>
+              </Card>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+            >
+              <Card className="p-8 border-2 hover:border-primary/30 transition-all text-center shadow-lg hover:shadow-xl bg-white h-full">
+                <div className="w-16 h-16 bg-success/10 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-md">
+                  <Shield className="w-8 h-8 text-success" />
+                </div>
+                <h3 className="text-xl mb-4">Pediatrician Review</h3>
+                <p className="text-muted-foreground">
+                  Expert feedback and recommendations from a qualified pediatrician within 48 hours
+                </p>
+              </Card>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="relative py-20 overflow-hidden">
+        {/* Decorative background elements */}
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute bottom-10 right-10 w-64 h-64 rounded-full bg-primary/20 blur-3xl"></div>
+          <div className="absolute top-20 left-10 w-48 h-48 rounded-full bg-warning/20 blur-3xl"></div>
+        </div>
+        
+        <div className="container mx-auto px-4 md:px-6 max-w-6xl relative z-10">
+          <motion.div 
+            className="text-center mb-16"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.6 }}
+          >
+            <h2 className="text-3xl md:text-4xl mb-4">How it works</h2>
+            <p className="text-lg text-muted-foreground">
+              Three simple steps, results in minutes
+            </p>
+          </motion.div>
+          
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Step 1 */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+            >
+              <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all border border-border h-full flex flex-col items-center">
+                <div className="w-16 h-16 rounded-full bg-primary text-white flex items-center justify-center text-xl mb-6 shadow-lg">
+                  1
+                </div>
+                <h3 className="text-xl mb-4 text-center">Answer questions about your child</h3>
+                <p className="text-muted-foreground text-center">
+                  Share what your child can do—from smiling and playing to talking and walking. Takes about 10 minutes!
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Step 2 */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
+              <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all border border-border h-full flex flex-col items-center">
+                <div className="w-16 h-16 rounded-full bg-primary text-white flex items-center justify-center text-xl mb-6 shadow-lg">
+                  2
+                </div>
+                <h3 className="text-xl mb-4 text-center">Get your personalized storybook</h3>
+                <p className="text-muted-foreground text-center">
+                  Receive a beautifully designed storybook celebrating your child's milestones instantly.
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Step 3 */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+            >
+              <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all border border-border h-full flex flex-col items-center">
+                <div className="w-16 h-16 rounded-full bg-primary text-white flex items-center justify-center text-xl mb-6 shadow-lg">
+                  3
+                </div>
+                <h3 className="text-xl mb-4 text-center">Receive expert guidance</h3>
+                <p className="text-muted-foreground text-center">
+                  A qualified pediatrician reviews and provides personalized recommendations.
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Trust Section */}
+      <section className="py-20 bg-primary/5">
+        <div className="container mx-auto px-4 max-w-5xl">
+          <motion.div 
+            className="text-center mb-16"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.6 }}
+          >
+            <Sparkles className="w-12 h-12 text-primary mx-auto mb-6" />
+            <h2 className="text-3xl md:text-4xl mb-4">Why parents love FirstSignFirst</h2>
+          </motion.div>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+            >
+              <Card className="p-8 bg-white text-center h-full">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                  <Heart className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="text-xl mb-3">Supportive, not scary</h3>
+                <p className="text-muted-foreground">
+                  We celebrate every milestone and provide gentle, encouraging guidance
+                </p>
+              </Card>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
+              <Card className="p-8 bg-white text-center h-full">
+                <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-6">
+                  <Shield className="w-8 h-8 text-success" />
+                </div>
+                <h3 className="text-xl mb-3">Expert-backed</h3>
+                <p className="text-muted-foreground">
+                  Built on CDC guidelines and reviewed by real pediatricians
+                </p>
+              </Card>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+            >
+              <Card className="p-8 bg-white text-center h-full">
+                <div className="w-16 h-16 rounded-full bg-secondary-accent/10 flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle className="w-8 h-8 text-secondary-accent" />
+                </div>
+                <h3 className="text-xl mb-3">Quick and easy</h3>
+                <p className="text-muted-foreground">
+                  No long forms or complicated medical terms—just simple questions
+                </p>
+              </Card>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+            >
+              <Card className="p-8 bg-white text-center h-full">
+                <div className="w-16 h-16 rounded-full bg-warning/10 flex items-center justify-center mx-auto mb-6">
+                  <Sparkles className="w-8 h-8 text-warning" />
+                </div>
+                <h3 className="text-xl mb-3">Beautiful memories</h3>
+                <p className="text-muted-foreground">
+                  Keep your child's storybook as a precious keepsake of their journey
+                </p>
+              </Card>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="py-20">
+        <div className="container mx-auto px-4 max-w-3xl">
+          <motion.div 
+            className="text-center"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.6 }}
+          >
+            <h2 className="text-3xl md:text-4xl mb-6">
+              Ready to get started?
+            </h2>
+            <p className="text-xl text-muted-foreground mb-10">
+              Your child's developmental journey starts here. No commitment required.
+            </p>
+            <Button 
+              size="lg" 
+              asChild
+              className="bg-primary hover:bg-primary/90 text-primary-foreground h-14 px-8"
+            >
+              <Link href="/assessment">
+                Start Free Assessment
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </Link>
+            </Button>
+            <p className="text-muted-foreground mt-6">
+              Takes 10 minutes • No login required • 100% free
+            </p>
+          </motion.div>
+        </div>
+      </section>
     </div>
   )
 }

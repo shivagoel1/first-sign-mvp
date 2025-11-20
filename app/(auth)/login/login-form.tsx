@@ -3,8 +3,11 @@
 import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+import Link from 'next/link'
+import { Mail, Lock, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { useGuestAssessmentStore } from '@/lib/stores/guest-assessment-store'
@@ -35,7 +38,7 @@ export default function LoginForm() {
         return true
       }
 
-      const response = await fetch('/api/submit-assessment', {
+      const response = await fetch('/api/assessment/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -84,11 +87,23 @@ export default function LoginForm() {
         return
       }
 
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('full_name')
+        .select('full_name, role')
         .eq('id', user.id)
         .maybeSingle()
+
+      if (profileError) {
+        console.error('[parent-login] Profile lookup error:', profileError)
+        setError('Unable to verify account. Please try again.')
+        return
+      }
+
+      // Check if user is a physician - redirect them to physician dashboard
+      if (profileData?.role === 'physician') {
+        window.location.href = '/dashboard/physician'
+        return
+      }
 
       const submitted = await submitPendingAssessment(
         user.id,
@@ -103,8 +118,7 @@ export default function LoginForm() {
         return
       }
 
-      router.replace('/dashboard/parent')
-      router.refresh()
+      window.location.href = '/dashboard/parent'
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -117,52 +131,82 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <label htmlFor="email" className="text-sm font-semibold text-slate-700">
-          Email
-        </label>
-        <Input
-          id="email"
-          type="email"
-          required
-          autoComplete="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          className="h-12 rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm focus-visible:ring-2 focus-visible:ring-indigo-400"
-        />
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div>
+        <Label htmlFor="email" className="text-base">
+          Email Address
+        </Label>
+        <div className="relative mt-2">
+          <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <Input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="parent@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            className="h-12 text-base pl-12"
+          />
+        </div>
       </div>
 
-      <div className="space-y-2">
-        <label htmlFor="password" className="text-sm font-semibold text-slate-700">
+      <div>
+        <Label htmlFor="password" className="text-base">
           Password
+        </Label>
+        <div className="relative mt-2">
+          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <Input
+            id="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className="h-12 text-base pl-12"
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
+          <span className="text-sm text-muted-foreground">Remember me</span>
         </label>
-        <Input
-          id="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          placeholder="••••••••"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          className="h-12 rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm focus-visible:ring-2 focus-visible:ring-indigo-400"
-        />
+        <Link
+          href="/"
+          className="text-sm text-primary hover:underline"
+        >
+          Forgot password?
+        </Link>
       </div>
 
       {error ? (
-        <p className="rounded-md bg-rose-50 p-2 text-sm text-rose-600">{error}</p>
+        <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>
       ) : null}
 
       <Button
         type="submit"
         disabled={loading}
+        size="lg"
         className={cn(
-          'w-full rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 py-3 text-base font-semibold shadow-lg transition hover:from-indigo-500 hover:via-purple-500 hover:to-pink-500',
+          'w-full bg-primary hover:bg-primary/90 text-primary-foreground h-14 text-base',
           loading && 'cursor-not-allowed opacity-80'
         )}
       >
-        {loading ? 'Signing in…' : 'Sign in'}
+        {loading ? (
+          <>
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+            Logging in...
+          </>
+        ) : (
+          <>
+            Login to Dashboard
+            <ArrowRight className="w-5 h-5 ml-2" />
+          </>
+        )}
       </Button>
     </form>
   )

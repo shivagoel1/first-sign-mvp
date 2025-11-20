@@ -1,7 +1,9 @@
 import OpenAI from 'openai'
+import type { ChatCompletion } from 'openai/resources/chat/completions'
 
 import type { Database } from '@/lib/database.types'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>
 
@@ -20,7 +22,6 @@ type GuidelineRow = {
   celebration_narrative: string
   concern_narrative: string
   parental_encouragement: string
-  recommend_next_step: string
   red_flag_icon: string | null
   storybook_scene_description: string
 }
@@ -34,7 +35,6 @@ type VerifiedMilestone = {
   celebration_narrative: string
   concern_narrative: string
   parental_encouragement: string
-  recommend_next_step: string
   red_flag_icon: string | null
   storybook_scene_description: string
 }
@@ -50,7 +50,6 @@ type RawAssessmentJoin = {
       celebrationnarrative: string
       concernnarrative: string
       parental_encouragement: string
-      recommend_next_step: string
       red_flag_icon: string | null
       storybookscenedescription: string
     } | null
@@ -58,7 +57,13 @@ type RawAssessmentJoin = {
 }
 
 async function getSupabaseClient(): Promise<SupabaseClient> {
-  return createClient()
+  // Use service-role on the server to bypass RLS for backend processing
+  try {
+    return createServiceClient() as unknown as SupabaseClient
+  } catch {
+    // Fallback to regular server client if service key missing (will be constrained by RLS)
+    return createClient()
+  }
 }
 
 export async function fetchAssessmentData(
@@ -76,14 +81,13 @@ export async function fetchAssessmentData(
         category,
         age_months,
         question,
-        cdcguidelines:cdcguidelines!inner(
-          celebrationnarrative,
-          concernnarrative,
-          parental_encouragement,
-          recommend_next_step,
-          red_flag_icon,
-          storybookscenedescription
-        )
+    cdcguidelines:cdcguidelines!inner(
+      celebrationnarrative,
+      concernnarrative,
+      parental_encouragement,
+      red_flag_icon,
+      storybookscenedescription
+    )
       )
     `
     )
@@ -112,7 +116,6 @@ export async function fetchAssessmentData(
         celebration_narrative: milestone.cdcguidelines.celebrationnarrative,
         concern_narrative: milestone.cdcguidelines.concernnarrative,
         parental_encouragement: milestone.cdcguidelines.parental_encouragement,
-        recommend_next_step: milestone.cdcguidelines.recommend_next_step,
         red_flag_icon: milestone.cdcguidelines.red_flag_icon,
         storybook_scene_description:
           milestone.cdcguidelines.storybookscenedescription,
@@ -137,7 +140,6 @@ export function verifyMilestones(guidelines: GuidelineRow[]): VerifiedMilestone[
     celebration_narrative: item.celebration_narrative,
     concern_narrative: item.concern_narrative,
     parental_encouragement: item.parental_encouragement,
-    recommend_next_step: item.recommend_next_step,
     red_flag_icon: item.red_flag_icon,
     storybook_scene_description: item.storybook_scene_description,
   }))
@@ -155,31 +157,78 @@ export async function getVerifiedMilestones(
   return verifyMilestones(data)
 }
 
+export type StorybookAgentResult = {
+  completion: ChatCompletion
+  storybook: { pages: unknown[] }
+}
+
+export type ValidationAgentResult = {
+  completion: ChatCompletion
+  approved: boolean
+  issues: string[]
+  storybook: { pages: unknown[] }
+}
+
 export async function callStorybookAgent(
   milestones: VerifiedMilestone[]
-): Promise<unknown> {
+): Promise<StorybookAgentResult> {
   const prompt = `
-You are a pediatric developmental storyteller AI.
+You are a pediatric developmental storyteller AI. Generate a JSON storybook that helps parents understand their child's progress.
 
-Generate a JSON storybook with the following structure:
-[
-  {
-    "milestone_code": "...",
-    "display_text": "...",
-    "visual_flag": "...",
-    "illustration_prompts": ["...", "..."]
-  },
-  ...
-]
+Output Requirements:
+- Return a JSON object with a single key "pages" whose value is an array.
+- Each array item must be an object with exactly these fields:
+  - "page_number" (integer, sequential starting at 1)
+  - "milestone_code" (string)
+  - "display_text" (string; milestone heading)
+  - "narrative_text" (string; 2-3 supportive sentences summarizing the child's status)
+  - "visual_flag" (string; red-flag description or empty string)
+  - "illustration_prompts" (array of 1-2 positive, child-friendly illustration prompts)
+  - "status" (string; either "met" or "missed")
 
-Rules:
-- Use a gentle, supportive tone.
-- When status is "met": include the celebration narrative only.
-- When status is "missed": include the concern narrative, parental encouragement, and recommended next step.
-- Include the red flag icon in visual_flag when available; otherwise empty string.
-- Suggest 1-2 illustration prompts derived from storybook_scene_description.
-- Output valid JSON only with the fields above.
-`
+CRITICAL: UNIQUE CONTENT FOR EACH PAGE
+- Each page MUST have completely unique narrative_text that is specific to that milestone
+- DO NOT repeat the same narrative across multiple pages, even if milestones have similar statuses
+- Each milestone_code must receive its own distinct narrative based on its specific question and context
+- If multiple milestones share similar narratives, adapt each one to be unique while maintaining accuracy
+- Vary sentence structure, word choice, and emphasis to ensure each page feels fresh and distinct
+
+CRITICAL: Use CDC-Provided Narratives as Primary Source
+- Each milestone in the input includes structured narratives from CDC guidelines:
+  - "celebration_narrative": Use this EXACTLY or adapt minimally when status is "met"
+  - "concern_narrative": Use this EXACTLY or adapt minimally when status is "missed"
+  - "parental_encouragement": Incorporate this when status is "missed" to maintain supportive tone
+  - "storybook_scene_description": Use this as the PRIMARY source for illustration_prompts
+- DO NOT generate new narratives from scratch. Your role is to:
+  1. Select the appropriate CDC narrative based on status (met → celebration, missed → concern)
+  2. Optionally combine concern_narrative + parental_encouragement for missed items (keep to 2-3 sentences)
+  3. Use storybook_scene_description directly or adapt slightly for illustration_prompts
+  4. Only generate new text if CDC narratives are missing or incomplete
+  5. IMPORTANT: If a milestone's CDC narrative is identical to a previous milestone's narrative, adapt it to be unique while preserving the core message
+
+Narrative Guidance:
+- Keep each narrative_text to two or three sentences.
+- Maintain the warm, encouraging tone from the CDC narratives.
+- Avoid alarming or diagnostic language; focus on gentle guidance.
+- When combining narratives, ensure smooth flow between sentences.
+- Ensure each narrative is specific to the milestone's question and context, not generic
+
+Illustration Prompt Guidance:
+- PRIMARY: Use the "storybook_scene_description" field from each milestone as the base for illustration_prompts
+- Each illustration_prompt should be unique and specific to that milestone's scene description
+- If multiple milestones are combined, merge their scene descriptions into one coherent visual
+- Prompts should depict joyful, inclusive, and child-safe scenes
+- Avoid medical or negative imagery; focus on supportive, hopeful visuals
+- Vary the scene composition and elements to ensure visual diversity
+
+Additional Rules:
+- Pages must be numbered sequentially without gaps.
+- Red flag content goes in visual_flag and narrative_text, but keep tone calm.
+- Status must strictly match "met" or "missed" and align with the supplied milestone data.
+- Ensure illustration_prompts are concise, descriptive scenes based on storybook_scene_description.
+- Review all pages before finalizing to ensure no duplicate narratives exist
+
+Respond with valid JSON only, following the structure above.`
 
   const completion = await openai.chat.completions.create({
     model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
@@ -191,7 +240,7 @@ Rules:
         content: JSON.stringify({ milestones }, null, 2),
       },
     ],
-    temperature: 0.6,
+    temperature: 0.8, // Increased from 0.6 to encourage more diverse, unique outputs
   })
 
   const content = completion.choices[0]?.message?.content
@@ -200,16 +249,18 @@ Rules:
   }
 
   try {
-    return JSON.parse(content)
+    const parsed = JSON.parse(content)
+    const pages = Array.isArray(parsed.pages) ? parsed.pages : []
+    return { completion, storybook: { pages } }
   } catch (error) {
     throw new Error(`Failed to parse storybook JSON: ${(error as Error).message}`)
   }
 }
 
 export async function callValidationAgent(
-  storybookJson: unknown,
+  storybookJson: { pages: unknown[] },
   milestones: VerifiedMilestone[]
-): Promise<unknown> {
+): Promise<ValidationAgentResult> {
   const prompt = `
 You are an editorial validation AI for pediatric developmental narratives.
 
@@ -223,9 +274,8 @@ Respond with JSON:
 {
   "approved": true|false,
   "issues": ["..."],
-  "storybook": {...}
-}
-`
+  "storybook": { "pages": [...] }
+}`
 
   const completion = await openai.chat.completions.create({
     model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
@@ -249,21 +299,23 @@ Respond with JSON:
 
   const content = completion.choices[0]?.message?.content
   if (!content) {
-    throw new Error('No validation response from OpenAI.')
+    throw new Error('No validation content returned from OpenAI.')
   }
 
-  let parsed: { approved: boolean; issues?: string[]; storybook: unknown }
   try {
-    parsed = JSON.parse(content)
+    const parsed = JSON.parse(content)
+    const pages = Array.isArray(parsed.storybook?.pages)
+      ? parsed.storybook.pages
+      : []
+    return {
+      completion,
+      approved: Boolean(parsed.approved),
+      issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+      storybook: { pages },
+    }
   } catch (error) {
     throw new Error(`Failed to parse validation JSON: ${(error as Error).message}`)
   }
-
-  if (!parsed.approved) {
-    throw new Error(`Storyboard validation failed: ${(parsed.issues ?? []).join('; ')}`)
-  }
-
-  return parsed.storybook
 }
 
 export async function checkStorybookExisting(
@@ -302,5 +354,8 @@ export async function storeStorybook(
   }
 }
 
-export type { GuidelineRow, VerifiedMilestone }
+export type {
+  GuidelineRow,
+  VerifiedMilestone,
+}
 

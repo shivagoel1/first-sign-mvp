@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import Link from 'next/link'
 import type { ComponentProps } from 'react'
 import { useMemo, useState } from 'react'
@@ -16,15 +15,22 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { StorybookViewer } from '@/components/storybook-viewer'
+import { StorybookViewer } from '@/components/dashboard/storybook-viewer'
 import {
   Baby,
   BookOpen,
   CalendarDays,
+  RefreshCw,
   Smile,
-  TrendingUp,
   UserRound,
+  Plus,
+  LogOut,
+  Eye,
+  Download,
+  FileText,
 } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { createClient } from '@/lib/supabase/client'
 
 export type AssessmentRecord = {
@@ -70,33 +76,33 @@ const statusMeta = {
     label: 'Pending Review',
     message:
       'Your assessment has been submitted and is pending physician approval.',
-    badgeClass: 'bg-amber-100 text-amber-700',
+    badgeClass: 'bg-warning/10 text-warning border-warning/20',
   },
   awaiting_review: {
     label: 'Awaiting Review',
     message:
       'Your assessment has been submitted and is pending physician approval.',
-    badgeClass: 'bg-amber-100 text-amber-700',
+    badgeClass: 'bg-warning/10 text-warning border-warning/20',
   },
   generating: {
     label: 'Generating Storybook',
     message: 'Your personalized storybook is being generated.',
-    badgeClass: 'bg-sky-100 text-sky-700',
+    badgeClass: 'bg-secondary-accent/10 text-secondary-accent border-secondary-accent/20',
   },
   approved: {
     label: 'Approved',
     message: 'Your storybook is ready to view!',
-    badgeClass: 'bg-emerald-100 text-emerald-700',
+    badgeClass: 'bg-success/10 text-success border-success/20',
   },
   needs_revision: {
     label: 'Needs Revision',
     message: 'Your assessment requires additional review.',
-    badgeClass: 'bg-rose-100 text-rose-700',
+    badgeClass: 'bg-destructive/10 text-destructive border-destructive/20',
   },
   rejected: {
     label: 'Requires Attention',
     message: 'Your assessment requires additional review.',
-    badgeClass: 'bg-rose-100 text-rose-700',
+    badgeClass: 'bg-destructive/10 text-destructive border-destructive/20',
   },
 } as const
 
@@ -119,28 +125,19 @@ function EmptyState({
   message: string
 }) {
   return (
-    <Card className="rounded-3xl bg-white p-8 shadow-2xl transition-all duration-300 hover:scale-[1.02] hover:shadow-3xl">
+    <Card className="p-8">
       <CardContent className="flex flex-col items-center gap-4 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-blue-600 shadow-lg">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Smile className="h-8 w-8" />
         </div>
         <div className="space-y-2">
-          <h3 className="text-xl font-bold text-gray-900">{title}</h3>
-          <p className="text-base text-gray-600 leading-relaxed">{message}</p>
+          <h3 className="text-xl font-semibold">{title}</h3>
+          <p className="text-base text-muted-foreground">{message}</p>
         </div>
       </CardContent>
     </Card>
   )
 }
-
-const cardBase =
-  'rounded-3xl bg-white p-8 shadow-2xl transition-all duration-300 hover:scale-[1.02] hover:shadow-3xl'
-
-const primaryButtonClasses =
-  'bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-3 rounded-xl font-semibold shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl'
-
-const secondaryButtonClasses =
-  'bg-white text-gray-700 border-2 border-gray-200 px-6 py-3 rounded-xl font-semibold transition-all duration-300 hover:border-gray-300 hover:shadow-md'
 
 export default function ParentDashboardClient({
   profile,
@@ -226,237 +223,298 @@ export default function ParentDashboardClient({
     router.push('/login')
   }
 
+  const handleRefresh = () => {
+    router.refresh()
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 py-12">
-      <div className="flex w-full flex-col space-y-10 px-6 lg:px-12">
-        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 lg:grid-cols-2">
-          <Card className={cardBase}>
-            <CardContent className="space-y-6 p-0">
+    <div className="min-h-screen py-8 bg-gradient-to-br from-orange-50/50 via-white to-orange-50/30">
+      <div className="container mx-auto px-4 max-w-7xl">
+        {/* Welcome Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.5 }}
+        >
+          <Card className="p-8 mb-8 shadow-lg border-orange-100 bg-gradient-to-br from-white via-white to-orange-50/20">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
               <div className="flex items-center gap-4">
-                <div className="relative h-16 w-16 overflow-hidden rounded-full bg-indigo-100">
-                  {profile?.avatar_url ? (
-                    <Image
-                      src={profile.avatar_url}
-                      alt={profile.full_name ?? 'Parent profile photo'}
-                      fill
-                      sizes="64px"
-                      className="object-cover"
-                    />
-                  ) : (
-                    <UserRound className="h-full w-full p-3 text-indigo-500" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.3em] text-indigo-600">
-                    Parent dashboard
-                  </p>
-                  <h1 className="mt-2 text-3xl font-bold text-gray-900">
-                    Welcome back{profile?.full_name ? `, ${profile.full_name}` : ''}!
-                  </h1>
-                  <p className="mt-2 text-sm font-semibold text-white/90">
-                    You&apos;re doing amazing supporting your child&apos;s growth!
-                  </p>
-                </div>
-              </div>
-
-              <p className="text-base text-gray-600 leading-relaxed">
-                Review milestones, pick up assessments, and celebrate each win. This space mirrors the glow of FirstSign&apos;s landing experience with calm, friendly design.
-              </p>
-
-              <div className="mt-6 flex flex-wrap items-center gap-3">
-                <Button asChild className={primaryButtonClasses}>
-                  <Link href="/assessment">Start New Assessment</Link>
-                </Button>
-                <Button asChild className={secondaryButtonClasses}>
-                  <Link href="/assessment/questions">Continue Latest Assessment</Link>
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="rounded-xl border border-white/60 bg-white/80 px-6 py-3 text-sm font-semibold text-indigo-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white"
+                <motion.div
+                  whileHover={{ scale: 1.05, rotate: 5 }}
+                  transition={{ type: "spring", stiffness: 300 }}
                 >
-                  Logout
-                </button>
+                  <Avatar className="w-16 h-16 ring-4 ring-primary/10 shadow-md">
+                    {profile?.avatar_url ? (
+                      <AvatarImage
+                        src={profile.avatar_url}
+                        alt={profile.full_name ?? 'Parent profile photo'}
+                        className="object-cover"
+                      />
+                    ) : null}
+                    <AvatarFallback className="bg-gradient-to-br from-primary via-primary to-orange-700 text-white text-xl shadow-inner">
+                      {profile?.full_name?.charAt(0) ?? 'P'}
+                    </AvatarFallback>
+                  </Avatar>
+                </motion.div>
+                <div>
+                  <h1 className="text-3xl mb-1 bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                    Welcome back{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}!
+                  </h1>
+                  <p className="text-muted-foreground/80 text-base">
+                    Track your children's developmental milestones
+                  </p>
+                </div>
               </div>
-            </CardContent>
+
+              <div className="flex flex-wrap gap-2">
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefresh}
+                    disabled={false}
+                    className="shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh
+                  </Button>
+                </motion.div>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleLogout}
+                    className="shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Logout
+                  </Button>
+                </motion.div>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button
+                  size="lg"
+                  className="w-full bg-gradient-to-r from-primary to-orange-700 hover:from-primary/90 hover:to-orange-700/90 text-white h-14 shadow-lg hover:shadow-xl transition-all"
+                  asChild
+                >
+                  <Link href="/assessment">
+                    <Plus className="w-5 h-5 mr-2" />
+                    Start New Assessment
+                  </Link>
+                </Button>
+              </motion.div>
+            </div>
           </Card>
+        </motion.div>
 
-          <Card className={cardBase}>
-            <CardContent className="space-y-6 p-0">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.3em] text-indigo-600">
-                  Family snapshot
-                </p>
-                <h2 className="mt-2 text-xl font-bold text-gray-900">
-                  {highlightedChild
-                    ? `${highlightedChild.child_name}'s journey`
-                    : 'Let’s begin your journey'}
-                </h2>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm font-semibold text-gray-700">
-                  <span>Assessment completion</span>
-                  <span>{completionRate}%</span>
-                </div>
-                <div className="h-3 w-full overflow-hidden rounded-full bg-gray-200">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"
-                    style={{ width: `${completionRate}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600 shadow-lg">
-                    <Baby className="h-6 w-6" />
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-700">Children in FirstSign</p>
-                    <p className="text-xl font-bold text-gray-900">{children.length}</p>
+        {/* Family Snapshot */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.5 }}
+        >
+          <Card className="p-8 mb-8 shadow-lg border-orange-100">
+            <h2 className="text-2xl mb-6">Family Snapshot</h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { icon: UserRound, bgClass: "bg-primary/10", hoverBgClass: "group-hover:bg-primary/20", iconClass: "text-primary", label: "Selected Child", value: highlightedChild?.child_name || "-" },
+                { icon: BookOpen, bgClass: "bg-success/10", hoverBgClass: "group-hover:bg-success/20", iconClass: "text-success", label: "Progress", value: `${completionRate}%` },
+                { icon: Baby, bgClass: "bg-secondary-accent/10", hoverBgClass: "group-hover:bg-secondary-accent/20", iconClass: "text-secondary-accent", label: "Children", value: children.length },
+                { icon: FileText, bgClass: "bg-warning/10", hoverBgClass: "group-hover:bg-warning/20", iconClass: "text-warning", label: "Assessments", value: totalAssessments }
+              ].map((stat, index) => (
+                <motion.div
+                  key={stat.label}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: index * 0.1 }}
+                  whileHover={{ scale: 1.05 }}
+                  className="flex items-center gap-4 group"
+                >
+                  <div className={`w-12 h-12 ${stat.bgClass} ${stat.hoverBgClass} rounded-xl flex items-center justify-center transition-colors`}>
+                    <stat.icon className={`w-6 h-6 ${stat.iconClass}`} />
                   </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-100 text-purple-600 shadow-lg">
-                    <BookOpen className="h-6 w-6" />
-                  </span>
                   <div>
-                    <p className="text-sm font-semibold text-gray-700">Assessments completed</p>
-                    <p className="text-xl font-bold text-gray-900">
-                      {completedAssessments}
-                    </p>
+                    <p className="text-2xl">{stat.value}</p>
+                    <p className="text-sm text-muted-foreground">{stat.label}</p>
                   </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-pink-100 text-pink-600 shadow-lg">
-                    <CalendarDays className="h-6 w-6" />
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-700">Latest submission</p>
-                    <p className="text-base text-gray-600 leading-relaxed">
-                      {latestAssessmentDate ?? 'Ready when you are'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                </motion.div>
+              ))}
+            </div>
 
-        <section className="mx-auto w-full max-w-7xl space-y-6">
-          <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-white drop-shadow-[0_6px_18px_rgba(0,0,0,0.35)]">
-                Your Children
-              </h2>
-              <p className="text-base text-white/90 leading-relaxed">
-                Keep every smile, milestone, and note organized in one caring space.
+            <div className="mt-6 pt-6 border-t border-border">
+              <p className="text-sm text-muted-foreground">
+                <CalendarDays className="w-4 h-4 inline mr-2" />
+                Most recent assessment: {latestAssessmentDate ?? 'Ready when you are'}
               </p>
             </div>
-            <span className="rounded-full bg-white/90 px-4 py-2 text-sm font-semibold text-indigo-700 shadow">
-              {children.length} {children.length === 1 ? 'Explorer' : 'Explorers'}
-            </span>
-          </header>
+          </Card>
+        </motion.div>
 
-          {children.length === 0 ? (
-            <EmptyState
-              title="No child profiles yet"
-              message="Create your first assessment to add your child and begin tracking milestones together."
-            />
-          ) : (
-            <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-3">
-              {children.map((child) => {
-                const age = monthsBetween(child.date_of_birth)
-                const completed = child.assessments.filter(
-                  (assessment) => !!assessment.completed_at
-                ).length
-                const isSelected = currentChild?.id === child.id
-
-                return (
-                  <Card
-                    key={child.id}
-                    className={`${cardBase} ${
-                      isSelected ? 'ring-4 ring-white/40' : ''
-                    }`}
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Your Children Section */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.5 }}
+          >
+            <h2 className="text-2xl mb-6">Your Children</h2>
+            <div className="space-y-4">
+              {children.length === 0 ? (
+                <Card className="p-8 text-center">
+                  <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Baby className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="mb-2">No children registered yet</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Start by creating your first assessment
+                  </p>
+                  <Button
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    asChild
                   >
-                    <CardHeader className="space-y-6 p-0">
-                      <div className="flex items-center gap-5">
-                        <div className="relative h-16 w-16 overflow-hidden rounded-full bg-blue-100 shadow-lg">
-                          {child.avatar_url ? (
-                            <Image
-                              src={child.avatar_url}
-                              alt={child.child_name}
-                              fill
-                              sizes="64px"
-                              className="object-cover"
-                            />
-                          ) : (
-                            <Baby className="h-full w-full p-3 text-blue-500" />
-                          )}
-                        </div>
-                        <div>
-                          <CardTitle className="text-xl font-bold text-gray-900">
-                            {child.child_name}
-                          </CardTitle>
-                          <CardDescription className="text-base text-gray-600 leading-relaxed">
-                            Age {age} months • {child.gender ?? 'Gender not specified'}
-                          </CardDescription>
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-600 leading-relaxed mb-4">
-                        {completed === 0 ? (
-                          <span>Start their first milestone journey together.</span>
-                        ) : (
-                          <span>
-                            {completed} assessment{completed === 1 ? '' : 's'} complete—beautiful progress!
-                          </span>
-                        )}
-                      </p>
-                    </CardHeader>
-                    <CardFooter className="pt-4">
-                      <Button
-                        className="rounded-lg bg-indigo-100 px-6 py-2.5 text-indigo-700 transition hover:bg-indigo-200"
+                    <Link href="/assessment">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create First Assessment
+                    </Link>
+                  </Button>
+                </Card>
+              ) : (
+                children.map((child, index) => {
+                  const age = monthsBetween(child.date_of_birth)
+                  const completed = child.assessments.filter(
+                    (assessment) => !!assessment.completed_at
+                  ).length
+                  const isSelected = currentChild?.id === child.id
+
+                  return (
+                    <motion.div
+                      key={child.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.4, delay: index * 0.1 }}
+                      whileHover={{ scale: 1.02 }}
+                    >
+                      <Card
+                        className={`p-6 cursor-pointer transition-all shadow-md hover:shadow-lg ${
+                          isSelected
+                            ? "border-2 border-primary bg-gradient-to-br from-primary/5 to-primary/10"
+                            : "hover:border-primary/30 bg-white"
+                        }`}
                         onClick={() => setSelectedChildId(child.id)}
                       >
-                        View {child.child_name.split(' ')[0] || 'profile'}
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                )
-              })}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="w-10 h-10 ring-2 ring-primary/20">
+                              {child.avatar_url ? (
+                                <AvatarImage
+                                  src={child.avatar_url}
+                                  alt={child.child_name}
+                                  className="object-cover"
+                                />
+                              ) : null}
+                              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary">
+                                {child.child_name.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <h3 className="text-lg">{child.child_name}</h3>
+                              <p className="text-sm text-muted-foreground">
+                                {age} months • {child.gender ?? 'Gender not specified'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm text-muted-foreground">
+                            {completed} assessment{completed !== 1 ? 's' : ''}
+                          </p>
+                          <Button
+                            size="sm"
+                            variant={isSelected ? "default" : "ghost"}
+                            className={isSelected ? "bg-primary hover:bg-primary/90 text-primary-foreground" : ""}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedChildId(child.id);
+                            }}
+                          >
+                            <Eye className="w-4 h-4 mr-2" />
+                            View
+                          </Button>
+                        </div>
+                      </Card>
+                    </motion.div>
+                  )
+                })
+              )}
             </div>
-          )}
-        </section>
+          </motion.div>
 
-        {currentChild ? (
-          <section className="mx-auto w-full max-w-7xl space-y-6">
-            <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="text-3xl font-bold text-white drop-shadow-[0_6px_18px_rgba(0,0,0,0.35)]">
-                  Assessments for {currentChild.child_name}
-                </h2>
-                <p className="text-base text-white/90 leading-relaxed">
-                  Follow their progress, revisit storybooks, and share reports with caregivers.
-                </p>
-              </div>
-              <span className="rounded-full bg-white/90 px-4 py-2 text-sm font-semibold text-indigo-700 shadow">
-                {currentChild.assessments.length}{' '}
-                {currentChild.assessments.length === 1 ? 'Assessment' : 'Assessments'}
-              </span>
-            </header>
+          {/* Assessments List */}
+          <motion.div
+            className="lg:col-span-2"
+            initial={{ opacity: 0, x: 20 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl">
+                {currentChild ? `${currentChild.child_name}'s Assessments` : "Select a Child"}
+              </h2>
+              {currentChild && (
+                <Button
+                  size="sm"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  asChild
+                >
+                  <Link href="/assessment">
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Assessment
+                  </Link>
+                </Button>
+              )}
+            </div>
 
-            {currentChild.assessments.length === 0 ? (
-              <EmptyState
-                title="No assessments yet"
-                message="Start a new assessment to receive personalized guidance and an AI-crafted storybook."
-              />
-            ) : (
-              <div className="space-y-6">
-                {currentChild.assessments.map((assessment) => {
+            <div className="space-y-4">
+              {!currentChild ? (
+                <Card className="p-12 text-center shadow-md">
+                  <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Eye className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="mb-2">No child selected</h3>
+                  <p className="text-muted-foreground">
+                    Select a child from the left to view their assessments
+                  </p>
+                </Card>
+              ) : currentChild.assessments.length === 0 ? (
+                <Card className="p-12 text-center shadow-md">
+                  <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                    <BookOpen className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="mb-2">No assessments yet</h3>
+                  <p className="text-muted-foreground mb-6">
+                    Start tracking {currentChild.child_name}'s developmental milestones
+                  </p>
+                  <Button
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    asChild
+                  >
+                    <Link href="/assessment">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create First Assessment
+                    </Link>
+                  </Button>
+                </Card>
+              ) : (
+                currentChild.assessments.map((assessment, index) => {
                   const meta = getStatusMeta(assessment.status)
                   const assessmentDate = assessment.completed_at
                     ? new Date(assessment.completed_at).toLocaleDateString(undefined, {
@@ -467,58 +525,105 @@ export default function ParentDashboardClient({
                     : 'In progress'
 
                   return (
-                    <Card key={assessment.id} className={cardBase}>
-                      <CardContent className="flex flex-col gap-5 p-0 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="space-y-3">
-                          <p className="text-sm font-medium text-gray-500">
-                            {assessmentDate}
-                          </p>
-                          <p className="text-lg font-semibold text-gray-900">
-                            Assessment ID: {assessment.id.slice(0, 8)}...
-                          </p>
-                          <Badge
-                            className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${meta.badgeClass}`}
-                          >
-                            {meta.label}
-                          </Badge>
-                          <p className="text-sm text-gray-600 leading-relaxed">
-                            {meta.message}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-                          {assessment.status === 'approved' && assessment.parent_visible ? (
-                            <Button
-                              className="rounded-lg bg-indigo-100 px-6 py-2.5 text-indigo-700 transition hover:bg-indigo-200"
-                              onClick={() => openStorybook(currentChild, assessment)}
-                            >
-                              View Storybook
-                            </Button>
-                          ) : (
-                            <span className="inline-flex items-center gap-2 rounded-xl border border-dashed border-white/40 bg-white/10 px-4 py-2 text-sm text-white">
-                              <BookOpen className="h-4 w-4" />
-                              Storybook in progress
-                            </span>
-                          )}
-                          {assessment.status === 'approved' && assessment.parent_visible && assessment.parent_pdf_url ? (
-                            <Button asChild className={primaryButtonClasses}>
-                              <a
-                                href={assessment.parent_pdf_url}
-                                target="_blank"
-                                rel="noreferrer"
+                    <motion.div
+                      key={assessment.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: index * 0.1 }}
+                      whileHover={{ scale: 1.01 }}
+                    >
+                      <Card className="p-6 shadow-md hover:shadow-lg transition-shadow bg-white">
+                        <div className="flex flex-col gap-4">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="flex items-center gap-3 mb-2">
+                                <h3 className="text-lg">Assessment {assessment.id.slice(0, 8)}...</h3>
+                                <Badge className={meta.badgeClass}>
+                                  {meta.label}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <CalendarDays className="w-4 h-4" />
+                                <span>{assessmentDate}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className={`p-4 rounded-lg border ${
+                            assessment.status === "approved" ? "bg-gradient-to-r from-success/5 to-success/10 border-success/20" :
+                            assessment.status === "generating" ? "bg-gradient-to-r from-secondary-accent/5 to-secondary-accent/10 border-secondary-accent/20" :
+                            assessment.status === "needs_revision" || assessment.status === "rejected" ? "bg-gradient-to-r from-destructive/5 to-destructive/10 border-destructive/20" :
+                            "bg-gradient-to-r from-warning/5 to-warning/10 border-warning/20"
+                          }`}>
+                            <p className="text-sm">{meta.message}</p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {assessment.status === 'approved' && assessment.parent_visible ? (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="whitespace-nowrap"
+                                onClick={() => openStorybook(currentChild, assessment)}
                               >
-                                Download PDF
-                              </a>
-                            </Button>
-                          ) : null}
+                                <BookOpen className="w-4 h-4 mr-2 flex-shrink-0" />
+                                View Storybook
+                              </Button>
+                            ) : assessment.parent_visible && assessment.ai_report ? (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="whitespace-nowrap"
+                                onClick={() => openStorybook(currentChild, assessment)}
+                              >
+                                <BookOpen className="w-4 h-4 mr-2 flex-shrink-0" />
+                                View Storybook
+                              </Button>
+                            ) : (
+                              <div className="flex items-center gap-2 px-3 py-2 bg-secondary-accent/10 rounded-md">
+                                <div className="w-4 h-4 border-2 border-secondary-accent border-t-transparent rounded-full animate-spin" />
+                                <span className="text-sm text-secondary-accent">Storybook in progress...</span>
+                              </div>
+                            )}
+                            {/* Show download button whenever PDF is available, regardless of status */}
+                            {assessment.parent_pdf_url ? (
+                              <Button
+                                size="sm"
+                                className="bg-primary hover:bg-primary/90 text-primary-foreground whitespace-nowrap"
+                                asChild
+                              >
+                                <a
+                                  href={assessment.parent_pdf_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  download
+                                >
+                                  <Download className="w-4 h-4 mr-2 flex-shrink-0" />
+                                  Download PDF
+                                </a>
+                              </Button>
+                            ) : assessment.parent_visible && assessment.ai_report ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="whitespace-nowrap"
+                                disabled
+                                title="PDF is being generated. Please check back soon."
+                              >
+                                <Download className="w-4 h-4 mr-2 flex-shrink-0" />
+                                PDF Generating...
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
-                      </CardContent>
-                    </Card>
+                      </Card>
+                    </motion.div>
                   )
-                })}
-              </div>
-            )}
-          </section>
-        ) : null}
+                })
+              )}
+            </div>
+          </motion.div>
+        </div>
       </div>
 
       <StorybookViewer

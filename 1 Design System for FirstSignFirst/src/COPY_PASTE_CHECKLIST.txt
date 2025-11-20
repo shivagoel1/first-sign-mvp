@@ -1,0 +1,112 @@
+FIRSTSIGNFIRST - COMPLETE FILE COPY CHECKLIST
+==============================================
+
+Use this checklist to copy all 60 files from Figma Make to Cursor.
+Check off each file as you complete it.
+
+MAIN COMPONENTS (9 files)
+--------------------------
+[ ] /components/AssessmentFlow.tsx          → src/components/AssessmentFlow.tsx
+[ ] /components/Header.tsx                  → src/components/Header.tsx
+[ ] /components/HomePage.tsx                → src/components/HomePage.tsx
+[ ] /components/ParentDashboard.tsx         → src/components/ParentDashboard.tsx
+[ ] /components/ParentLogin.tsx             → src/components/ParentLogin.tsx
+[ ] /components/PhysicianDashboard.tsx      → src/components/PhysicianDashboard.tsx
+[ ] /components/PhysicianLogin.tsx          → src/components/PhysicianLogin.tsx
+[ ] /components/ResultsPage.tsx             → src/components/ResultsPage.tsx
+[ ] /components/StorybookViewer.tsx         → src/components/StorybookViewer.tsx
+
+SYSTEM COMPONENTS (1 file)
+---------------------------
+[ ] /components/figma/ImageWithFallback.tsx → src/components/figma/ImageWithFallback.tsx
+
+UI COMPONENTS (48 files)
+-------------------------
+[ ] /components/ui/utils.ts                 → src/components/ui/utils.ts
+[ ] /components/ui/use-mobile.ts            → src/components/ui/use-mobile.ts
+[ ] /components/ui/accordion.tsx            → src/components/ui/accordion.tsx
+[ ] /components/ui/alert-dialog.tsx         → src/components/ui/alert-dialog.tsx
+[ ] /components/ui/alert.tsx                → src/components/ui/alert.tsx
+[ ] /components/ui/aspect-ratio.tsx         → src/components/ui/aspect-ratio.tsx
+[ ] /components/ui/avatar.tsx               → src/components/ui/avatar.tsx
+[ ] /components/ui/badge.tsx                → src/components/ui/badge.tsx
+[ ] /components/ui/breadcrumb.tsx           → src/components/ui/breadcrumb.tsx
+[ ] /components/ui/button.tsx               → src/components/ui/button.tsx
+[ ] /components/ui/calendar.tsx             → src/components/ui/calendar.tsx
+[ ] /components/ui/card.tsx                 → src/components/ui/card.tsx
+[ ] /components/ui/carousel.tsx             → src/components/ui/carousel.tsx
+[ ] /components/ui/chart.tsx                → src/components/ui/chart.tsx
+[ ] /components/ui/checkbox.tsx             → src/components/ui/checkbox.tsx
+[ ] /components/ui/collapsible.tsx          → src/components/ui/collapsible.tsx
+[ ] /components/ui/command.tsx              → src/components/ui/command.tsx
+[ ] /components/ui/context-menu.tsx         → src/components/ui/context-menu.tsx
+[ ] /components/ui/dialog.tsx               → src/components/ui/dialog.tsx
+[ ] /components/ui/drawer.tsx               → src/components/ui/drawer.tsx
+[ ] /components/ui/dropdown-menu.tsx        → src/components/ui/dropdown-menu.tsx
+[ ] /components/ui/form.tsx                 → src/components/ui/form.tsx
+[ ] /components/ui/hover-card.tsx           → src/components/ui/hover-card.tsx
+[ ] /components/ui/input-otp.tsx            → src/components/ui/input-otp.tsx
+[ ] /components/ui/input.tsx                → src/components/ui/input.tsx
+[ ] /components/ui/label.tsx                → src/components/ui/label.tsx
+[ ] /components/ui/menubar.tsx              → src/components/ui/menubar.tsx
+[ ] /components/ui/navigation-menu.tsx      → src/components/ui/navigation-menu.tsx
+[ ] /components/ui/pagination.tsx           → src/components/ui/pagination.tsx
+[ ] /components/ui/popover.tsx              → src/components/ui/popover.tsx
+[ ] /components/ui/progress.tsx             → src/components/ui/progress.tsx
+[ ] /components/ui/radio-group.tsx          → src/components/ui/radio-group.tsx
+[ ] /components/ui/resizable.tsx            → src/components/ui/resizable.tsx
+[ ] /components/ui/scroll-area.tsx          → src/components/ui/scroll-area.tsx
+[ ] /components/ui/select.tsx               → src/components/ui/select.tsx
+[ ] /components/ui/separator.tsx            → src/components/ui/separator.tsx
+[ ] /components/ui/sheet.tsx                → src/components/ui/sheet.tsx
+[ ] /components/ui/sidebar.tsx              → src/components/ui/sidebar.tsx
+[ ] /components/ui/skeleton.tsx             → src/components/ui/skeleton.tsx
+[ ] /components/ui/slider.tsx               → src/components/ui/slider.tsx
+[ ] /components/ui/sonner.tsx               → src/components/ui/sonner.tsx
+[ ] /components/ui/switch.tsx               → src/components/ui/switch.tsx
+[ ] /components/ui/table.tsx                → src/components/ui/table.tsx
+[ ] /components/ui/tabs.tsx                 → src/components/ui/tabs.tsx
+[ ] /components/ui/textarea.tsx             → src/components/ui/textarea.tsx
+[ ] /components/ui/toggle-group.tsx         → src/components/ui/toggle-group.tsx
+[ ] /components/ui/toggle.tsx               → src/components/ui/toggle.tsx
+[ ] /components/ui/tooltip.tsx              → src/components/ui/tooltip.tsx
+
+STYLES (1 file)
+----------------
+[ ] /styles/globals.css                     → src/styles/globals.css
+
+OTHER FILES NEEDED (1 file)
+----------------------------
+[ ] /App.tsx                                → src/App.tsx
+
+TOTAL: 60 FILES
+
+HOW TO COPY EACH FILE
+---------------------
+1. In Figma Make: Find file in left sidebar and click to open
+2. Select All: Press Cmd+A (Mac) or Ctrl+A (Windows)
+3. Copy: Press Cmd+C (Mac) or Ctrl+C (Windows)
+4. In Cursor: Create new file at destination path
+5. Paste: Press Cmd+V (Mac) or Ctrl+V (Windows)
+6. Save: Press Cmd+S (Mac) or Ctrl+S (Windows)
+7. Check this box: Mark file as complete above
+
+TIME ESTIMATE
+-------------
+- Per file: ~30 seconds
+- Total: ~30-45 minutes for all files
+
+VERIFICATION
+------------
+After copying all files, check:
+[ ] All 60 checkboxes above are marked
+[ ] No import errors in Cursor
+[ ] All files appear in correct folders
+[ ] Project builds without errors
+
+NOTES
+-----
+- The ImageWithFallback.tsx file is protected - copy as-is
+- The globals.css contains all your design tokens
+- All UI components are from ShadCN library
+- If you encounter errors, check import paths match your structure

@@ -56,15 +56,22 @@ export type Database = {
       }
       assessment_results: {
         Row: {
+          ai_generation_cost: number | null
+          ai_images_generated: number | null
+          ai_processing_progress: number | null
+          ai_processing_status: string | null
           ai_report: string | null
+          ai_tokens_used: number | null
           approved_at: string | null
           assessment_id: string
           category_scores: Json | null
           created_at: string | null
           id: string
           overall_score: number | null
+          parent_pdf_url: string | null
           parent_visible: boolean | null
           physician_notes: string | null
+          physician_pdf_url: string | null
           physician_reviewed: boolean | null
           recommendations: string[] | null
           red_flag_count: number | null
@@ -81,15 +88,22 @@ export type Database = {
             | null
         }
         Insert: {
+          ai_generation_cost?: number | null
+          ai_images_generated?: number | null
+          ai_processing_progress?: number | null
+          ai_processing_status?: string | null
           ai_report?: string | null
+          ai_tokens_used?: number | null
           approved_at?: string | null
           assessment_id: string
           category_scores?: Json | null
           created_at?: string | null
           id?: string
           overall_score?: number | null
+          parent_pdf_url?: string | null
           parent_visible?: boolean | null
           physician_notes?: string | null
+          physician_pdf_url?: string | null
           physician_reviewed?: boolean | null
           recommendations?: string[] | null
           red_flag_count?: number | null
@@ -106,15 +120,22 @@ export type Database = {
             | null
         }
         Update: {
+          ai_generation_cost?: number | null
+          ai_images_generated?: number | null
+          ai_processing_progress?: number | null
+          ai_processing_status?: string | null
           ai_report?: string | null
+          ai_tokens_used?: number | null
           approved_at?: string | null
           assessment_id?: string
           category_scores?: Json | null
           created_at?: string | null
           id?: string
           overall_score?: number | null
+          parent_pdf_url?: string | null
           parent_visible?: boolean | null
           physician_notes?: string | null
+          physician_pdf_url?: string | null
           physician_reviewed?: boolean | null
           recommendations?: string[] | null
           red_flag_count?: number | null
