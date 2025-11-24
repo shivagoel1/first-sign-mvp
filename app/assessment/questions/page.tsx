@@ -4,16 +4,13 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, ArrowRight, Baby, Lightbulb } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Baby } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
@@ -47,20 +44,38 @@ const getResponseOptions = (question: MilestoneQuestion) => {
     try {
       const parsed = JSON.parse(question.options) as string[]
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Map options to values - use index to ensure unique values
+        // Map options to values - create unique values based on normalized label
+        // This ensures uniqueness while preserving semantic meaning for backend processing
         return parsed.map((opt, idx) => {
-          const lower = opt.toLowerCase()
-          let value = `option_${idx}`
-          // Try to map to standard values if possible
-          if (lower.includes('not yet') || lower.includes('rarely') || lower === 'no' || lower.includes('cannot')) {
-            value = 'no'
+          const lower = opt.toLowerCase().trim()
+          
+          // Determine semantic category first
+          let semanticCategory: string
+          if (lower.includes('not yet') || lower.includes('rarely') || lower === 'no' || lower.includes('cannot') || lower.includes("can't")) {
+            semanticCategory = 'no'
           } else if (lower.includes('sometimes')) {
-            value = 'sometimes'
+            semanticCategory = 'sometimes'
           } else if (lower.includes('not sure')) {
-            value = 'not_sure'
+            semanticCategory = 'not_sure'
           } else if (lower.includes('yes') || lower.includes('frequently') || lower.includes('always')) {
-            value = 'yes'
+            semanticCategory = 'yes'
+          } else {
+            semanticCategory = 'other'
           }
+          
+          // Create unique value: use semantic category + unique identifier from label
+          // Extract unique part of the label (remove common words)
+          const uniquePart = lower
+            .replace(/^(yes,?\s*|with\s+)/g, '')
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .substring(0, 15)
+          
+          // Always append index to ensure absolute uniqueness
+          const value = uniquePart 
+            ? `${semanticCategory}_${uniquePart}_${idx}`
+            : `${semanticCategory}_${idx}`
+          
           return { label: opt, value }
         })
       }
@@ -70,8 +85,9 @@ const getResponseOptions = (question: MilestoneQuestion) => {
   }
   
   // Default options matching Figma design pattern
+  // Use unique values for each option
   return [
-    { label: 'Yes, frequently', value: 'yes' },
+    { label: 'Yes, frequently', value: 'yes_frequently' },
     { label: 'Sometimes', value: 'sometimes' },
     { label: 'Not yet', value: 'no' },
   ]
@@ -134,7 +150,6 @@ export default function AssessmentQuestionsPage() {
     }
 
     fetchQuestions()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchedAgeMonths, disease])
 
   const currentQuestion = useMemo(
@@ -284,7 +299,6 @@ export default function AssessmentQuestionsPage() {
     const selectedResponse = storedResponse && validOptionValues.includes(storedResponse) 
       ? storedResponse 
       : ''
-    const categoryStyle = categoryStyles[currentQuestion.category] ?? { bg: 'bg-primary/10', text: 'text-primary' }
 
     return (
       <motion.div
@@ -366,7 +380,7 @@ export default function AssessmentQuestionsPage() {
         <div className="bg-accent/30 rounded-lg p-4 border border-accent">
           <p className="text-sm text-accent-foreground">
             💡 <strong>Remember:</strong> Every child develops at their own pace.{' '}
-            These questions help us understand your child's unique journey.
+            These questions help us understand your child&apos;s unique journey.
           </p>
         </div>
 
@@ -407,16 +421,22 @@ export default function AssessmentQuestionsPage() {
   return (
     <div className="min-h-screen bg-orange-50/30">
       <Header userType="guest" currentPath="/assessment/questions" />
-      <div className="container mx-auto px-4 max-w-3xl py-8">
+      <div className="container mx-auto px-4 max-w-3xl py-8 pt-16">
         {/* Assessment Title and Introduction */}
-        {childName && (
-          <div className="mb-6">
-            <h1 className="text-3xl mb-2">{childName}'s Assessment</h1>
+        <div className="mb-6">
+          {childName ? (
+            <>
+              <h1 className="text-3xl mb-2">{childName}&apos;s Assessment</h1>
+              <p className="text-muted-foreground">
+                Answer each question to help us understand your child&apos;s developmental progress.
+              </p>
+            </>
+          ) : (
             <p className="text-muted-foreground">
-              Answer each question to help us understand your child's developmental progress.
+              Answer each question to help us understand your child&apos;s developmental progress.
             </p>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Progress Bar */}
         {questions.length > 0 && (

@@ -30,12 +30,19 @@ async function updateProgress(
   assessmentId: string,
   progress: number
 ) {
-  const { error } = await supabase
+  console.log(`[AI Process] Updating progress to ${progress}% for assessment ${assessmentId}`)
+  const { error, data } = await supabase
     .from('assessment_results')
     .update({ ai_processing_progress: progress })
     .eq('assessment_id', assessmentId)
+    .select()
   if (error) {
     console.error('[AI Process] Failed to update progress:', error)
+  } else {
+    console.log(`[AI Process] Successfully updated progress to ${progress}% (rows affected: ${data?.length ?? 0})`)
+    // Longer delay to ensure database write is committed and visible to frontend polling
+    // This helps the frontend polling catch intermediate progress values
+    await new Promise(resolve => setTimeout(resolve, 200))
   }
 }
 
@@ -57,6 +64,63 @@ async function processAssessment(
   const existing = await checkStorybookExisting(assessmentId)
   console.log('[AI Process] Existing storybook?', Boolean(existing))
 
+  // Clean up old data if forcing regeneration
+  if (forceRegenerate && existing) {
+    console.log('[AI Process] Force regeneration requested. Cleaning up old data...')
+    
+    try {
+      // Get service client for cleanup operations
+      const serviceSupabase = createServiceClient() as unknown as Awaited<ReturnType<typeof createClient>>
+      
+      // Clean up old PDFs from storage
+      const { data: assessmentResult } = await supabase
+        .from('assessment_results')
+        .select('parent_pdf_url, physician_pdf_url')
+        .eq('assessment_id', assessmentId)
+        .maybeSingle()
+      
+      if (assessmentResult) {
+        const pdfsToDelete: string[] = []
+        if (assessmentResult.parent_pdf_url) {
+          // Extract path from URL (format: /storage/v1/object/public/storybook-pdfs/path/to/file.pdf)
+          const parentPath = assessmentResult.parent_pdf_url.split('/storybook-pdfs/')[1]
+          if (parentPath) pdfsToDelete.push(parentPath)
+        }
+        if (assessmentResult.physician_pdf_url) {
+          const physicianPath = assessmentResult.physician_pdf_url.split('/storybook-pdfs/')[1]
+          if (physicianPath) pdfsToDelete.push(physicianPath)
+        }
+        
+        if (pdfsToDelete.length > 0) {
+          const { error: deleteError } = await serviceSupabase.storage
+            .from('storybook-pdfs')
+            .remove(pdfsToDelete)
+          
+          if (deleteError) {
+            console.warn('[AI Process] Error deleting old PDFs:', deleteError)
+          } else {
+            console.log(`[AI Process] Cleaned up ${pdfsToDelete.length} old PDF(s)`)
+          }
+        }
+      }
+      
+      // Clear PDF URLs in database
+      await supabase
+        .from('assessment_results')
+        .update({
+          parent_pdf_url: null,
+          physician_pdf_url: null,
+          ai_report: null,
+        })
+        .eq('assessment_id', assessmentId)
+      
+      console.log('[AI Process] Cleaned up old PDF URLs and AI report from database')
+    } catch (cleanupError) {
+      console.error('[AI Process] Error during cleanup:', cleanupError)
+      // Continue with regeneration even if cleanup fails
+    }
+  }
+
   if (existing && !forceRegenerate) {
     console.log('[AI Process] Existing report found, skipping generation.')
     return {
@@ -76,9 +140,22 @@ async function processAssessment(
     }
   }
 
+  // Update progress immediately when starting
+  await updateProgress(supabase, assessmentId, 5)
+  console.log('[AI Process] Progress updated to 5% - starting milestone verification')
+
   const verified = await getVerifiedMilestones(assessmentId, seed)
   console.log('[AI Process] Verified milestones:', verified.length)
-  await updateProgress(supabase, assessmentId, 20)
+  if (verified.length === 0) {
+    throw new Error('No verified milestones found for this assessment. Cannot generate storybook.')
+  }
+  console.log('[AI Process] Sample verified milestone:', {
+    milestone_code: verified[0]?.milestone_code,
+    category: verified[0]?.category,
+    status: verified[0]?.status,
+  })
+  await updateProgress(supabase, assessmentId, 10)
+  console.log('[AI Process] Progress updated to 10% - milestones verified')
 
   // Optional: Selector Agent to reduce the set before combining
   let filteredVerified = verified
@@ -97,10 +174,14 @@ async function processAssessment(
     }
   }
 
+  await updateProgress(supabase, assessmentId, 20)
+
+  // Use all verified milestones for storybook generation (not filtered)
+  // The selector agent is optional and only for reducing input, but we want full storybook
   const storybookResult = await callStorybookAgent(verified)
   const draftStorybook = storybookResult.storybook
   console.log('[AI Process] Storybook agent complete')
-  await updateProgress(supabase, assessmentId, 40)
+  await updateProgress(supabase, assessmentId, 35)
 
   const storybookCost = calculateOpenAICost(storybookResult.completion)
   const storybookTokens =
@@ -124,30 +205,100 @@ async function processAssessment(
     validatedStorybook = validationResult.storybook
   }
 
-  await updateProgress(supabase, assessmentId, 50)
+  await updateProgress(supabase, assessmentId, 45)
 
   const rawPages = Array.isArray(validatedStorybook?.pages)
     ? validatedStorybook.pages
     : []
 
-  // Combine multiple small milestones into compact pages
-  // If selector ran, prefer that filtered set when combining by filtering rawPages
-  const selectedCodes =
-    process.env.USE_SELECTOR_AGENT === 'true'
-      ? new Set((filteredVerified as any[]).map((v) => v.milestone_code))
-      : null
-  const pagesForCombine =
-    selectedCodes && selectedCodes.size
-      ? (rawPages as any[]).filter((p) =>
-          p?.milestone_code ? selectedCodes.has(p.milestone_code) : true
-        )
-      : (rawPages as any[])
+  console.log('[AI Process] Raw pages from storybook agent:', rawPages.length)
+  console.log('[AI Process] Verified milestones count:', verified.length)
+  console.log('[AI Process] Filtered verified milestones count:', filteredVerified.length)
 
-  let combinedPages = combinePages(
+  // Always use ALL verified milestones for page creation, not just filtered ones
+  // The selector agent is only for storybook agent input, not for limiting final pages
+  let pagesForCombine = rawPages
+  const expectedPages = verified.length // Use all verified milestones, not filtered
+  const threshold = Math.max(1, Math.floor(expectedPages * 0.8))
+  
+  if (rawPages.length < threshold) {
+    console.warn(`[AI Process] Storybook agent only generated ${rawPages.length} pages for ${expectedPages} milestones (threshold: ${threshold}). Creating pages from ALL verified milestones.`)
+    
+    // Helper function to sanitize text - remove control characters and normalize whitespace
+    const sanitizeText = (text: string | null | undefined): string => {
+      if (!text) return ''
+      return text
+        .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // Remove control characters
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .trim()
+    }
+
+    // Create pages directly from ALL verified milestones (not filteredVerified)
+    // This ensures we get pages for all milestones, not just the selected subset
+    const milestonePages = (verified as any[]).map((milestone: any, index: number) => {
+      let narrativeText = ''
+      if (milestone.status === 'met') {
+        narrativeText = sanitizeText(milestone.celebration_narrative) || 'Great progress on this milestone!'
+      } else {
+        const concern = sanitizeText(milestone.concern_narrative)
+        const encouragement = sanitizeText(milestone.parental_encouragement)
+        narrativeText = [concern, encouragement].filter(Boolean).join(' ').trim() || 'Gentle support and practice will help with this milestone.'
+      }
+
+      return {
+        page_number: index + 1,
+        milestone_code: milestone.milestone_code,
+        category: milestone.category || 'General',
+        display_text: sanitizeText(milestone.question) || `Milestone ${milestone.milestone_code}`,
+        narrative_text: narrativeText,
+        visual_flag: sanitizeText(milestone.red_flag_icon) || '',
+        illustration_prompts: milestone.storybook_scene_description 
+          ? [sanitizeText(milestone.storybook_scene_description)]
+          : ['Supportive family scene with inclusive, child-safe visuals'],
+        status: milestone.status || 'missed',
+      }
+    })
+    
+    pagesForCombine = milestonePages
+    console.log(`[AI Process] Created ${pagesForCombine.length} pages from ${verified.length} verified milestones`)
+  } else {
+    // Use raw pages from storybook agent
+    // Don't filter based on selector agent - use all pages generated
+    console.log(`[AI Process] Using ${pagesForCombine.length} pages from storybook agent`)
+  }
+
+  console.log('[AI Process] Pages for combining:', pagesForCombine.length)
+
+  // Ensure we have pages to combine
+  if (pagesForCombine.length === 0) {
+    throw new Error('No pages available to combine. Cannot generate storybook.')
+  }
+
+  // Ensure missed-first prioritization for page ordering
+  let combinedPages = await combinePages(
     pagesForCombine as any,
-    undefined,
+    { prioritize: 'missed-first' }, // Explicitly set to show needs support first, then celebrations
     (filteredVerified as any) ?? (verified as any)
   )
+
+  console.log('[AI Process] Combined pages count:', combinedPages.length)
+  console.log('[AI Process] Page order:')
+  combinedPages.forEach((p: any) => {
+    console.log(`  Page ${p.page_number}: ${p.status} - ${p.category} - "${p.display_text}"`)
+  })
+  if (combinedPages.length === 0) {
+    throw new Error('combinePages returned 0 pages. Cannot generate storybook.')
+  }
+  
+  // Log sample combined page
+  if (combinedPages.length > 0) {
+    console.log('[AI Process] Sample combined page:', {
+      page_number: combinedPages[0]?.page_number,
+      category: combinedPages[0]?.category,
+      status: combinedPages[0]?.status,
+      has_image_prompt: !!combinedPages[0]?.illustration_prompts?.[0],
+    })
+  }
 
   // Optional: Polish agent to refine caption/prompt per page
   if (process.env.USE_POLISH_AGENT === 'true') {
@@ -168,18 +319,46 @@ async function processAssessment(
     })
   }
 
-  const imagePrompts = combinedPages.map((page: any, index: number) => ({
-    milestone_code: page.milestone_code ?? `page-${index + 1}`,
+  // Create image prompts using the properly ordered and numbered pages
+  // The page_number from combinedPages is already correctly set (1, 2, 3, ...)
+  // with missed pages first, then met pages
+  const imagePrompts = combinedPages.map((page: any) => ({
+    milestone_code: page.milestone_code ?? `page-${page.page_number}`,
     scene_description:
       page.illustration_prompts?.[0] ??
       page.display_text ??
       'Supportive family combined illustration',
-    page_number: page.page_number ?? index + 1,
+    page_number: page.page_number, // Use the properly ordered page number
+    category: page.category ?? null, // Include category for fallback prompts
   }))
+  
+  console.log('[AI Process] Image prompts created:', imagePrompts.length)
+  console.log('[AI Process] Image prompt order:')
+  imagePrompts.forEach((prompt) => {
+    console.log(`  Page ${prompt.page_number}: ${prompt.scene_description.substring(0, 50)}...`)
+  })
 
-  const generatedImages = await generateStorybookImages(imagePrompts, assessmentId)
+  // Generate images with progress updates (50% to 80%)
+  // This is the longest step, so we give it 30% of the progress bar
+  const totalImages = imagePrompts.length
+  await updateProgress(supabase, assessmentId, 50)
+  
+  const generatedImages = await generateStorybookImages(
+    imagePrompts,
+    assessmentId,
+    async (completed, total) => {
+      // Progress from 50% to 80% based on image completion
+      // This gives us 30% range for image generation, making it very visible
+      const imageProgress = completed / total
+      // Use Math.ceil to ensure we get at least 51% when first image completes
+      const progress = Math.min(80, 50 + Math.ceil(imageProgress * 30)) // 50% to 80%
+      await updateProgress(supabase, assessmentId, progress)
+      console.log(`[AI Process] Image generation progress: ${completed}/${total} (${progress}%)`)
+    },
+    forceRegenerate ?? false // Pass forceRegenerate flag to reuse existing images unless forced
+  )
   console.log('[AI Process] Images generated:', generatedImages.length)
-  await updateProgress(supabase, assessmentId, 75)
+  await updateProgress(supabase, assessmentId, 80)
 
   const successfulImages = generatedImages.filter((image) =>
     image.image_url && !image.image_url.includes('placeholder')
@@ -233,6 +412,7 @@ async function processAssessment(
   })
 
   console.log('[AI Process] Starting PDF generation')
+  await updateProgress(supabase, assessmentId, 82)
   const parentPdfUrl = await generateStorybookPDF(
     { pages: storybookWithImages },
     {
@@ -248,6 +428,7 @@ async function processAssessment(
     console.error('[AI Process] Parent PDF generation failed!')
   }
 
+  await updateProgress(supabase, assessmentId, 88)
   const physicianPdfUrl = await generateStorybookPDF(
     { pages: storybookWithImages },
     {
@@ -267,7 +448,10 @@ async function processAssessment(
     parentPdfUrl: parentPdfUrl || 'FAILED',
     physicianPdfUrl: physicianPdfUrl || 'FAILED',
   })
-  await updateProgress(supabase, assessmentId, 90)
+  await updateProgress(supabase, assessmentId, 95)
+  
+  // Final progress update before completion
+  await updateProgress(supabase, assessmentId, 99)
 
   return {
     success: true,
@@ -318,10 +502,12 @@ export async function POST(request: NextRequest) {
 
     const { error: setProcessingError } = await supabase
       .from('assessment_results')
-      .update({ ai_processing_status: 'processing', ai_processing_progress: 0 } as any)
+      .update({ ai_processing_status: 'processing', ai_processing_progress: 5 } as any)
       .eq('assessment_id', assessmentId)
     if (setProcessingError) {
       console.error('[AI Process] Failed to set processing status:', setProcessingError)
+    } else {
+      console.log('[AI Process] Initialized progress at 5%')
     }
 
     const seed = Array.isArray(body.verifiedMilestones)

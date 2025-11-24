@@ -130,18 +130,27 @@ export async function fetchAssessmentData(
   return mapped
 }
 
+// Helper function to sanitize text - remove control characters and normalize whitespace
+function sanitizeText(text: string | null | undefined): string {
+  if (!text) return ''
+  return text
+    .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // Remove control characters
+    .replace(/\s+/g, ' ') // Normalize whitespace (multiple spaces/newlines to single space)
+    .trim()
+}
+
 export function verifyMilestones(guidelines: GuidelineRow[]): VerifiedMilestone[] {
   return guidelines.map((item) => ({
     milestone_code: item.milestone_code,
     category: item.category,
     age_months: item.age_months,
-    question: item.question,
+    question: sanitizeText(item.question),
     status: item.response === 'yes' ? 'met' : 'missed',
-    celebration_narrative: item.celebration_narrative,
-    concern_narrative: item.concern_narrative,
-    parental_encouragement: item.parental_encouragement,
-    red_flag_icon: item.red_flag_icon,
-    storybook_scene_description: item.storybook_scene_description,
+    celebration_narrative: sanitizeText(item.celebration_narrative),
+    concern_narrative: sanitizeText(item.concern_narrative),
+    parental_encouragement: sanitizeText(item.parental_encouragement),
+    red_flag_icon: sanitizeText(item.red_flag_icon),
+    storybook_scene_description: sanitizeText(item.storybook_scene_description),
   }))
 }
 
@@ -175,16 +184,24 @@ export async function callStorybookAgent(
   const prompt = `
 You are a pediatric developmental storyteller AI. Generate a JSON storybook that helps parents understand their child's progress.
 
+CRITICAL: Generate pages for ALL milestones provided
+- You MUST create a page for EACH milestone in the input array
+- The number of pages in your output MUST match the number of milestones provided
+- Do NOT skip any milestones or combine multiple milestones into a single page at this stage
+- Each milestone should get its own dedicated page with unique content
+
 Output Requirements:
 - Return a JSON object with a single key "pages" whose value is an array.
+- The array MUST contain one page object for each milestone in the input
 - Each array item must be an object with exactly these fields:
   - "page_number" (integer, sequential starting at 1)
-  - "milestone_code" (string)
+  - "milestone_code" (string) - MUST match one of the milestone codes from input
   - "display_text" (string; milestone heading)
   - "narrative_text" (string; 2-3 supportive sentences summarizing the child's status)
   - "visual_flag" (string; red-flag description or empty string)
   - "illustration_prompts" (array of 1-2 positive, child-friendly illustration prompts)
   - "status" (string; either "met" or "missed")
+  - "category" (string; the milestone category)
 
 CRITICAL: UNIQUE CONTENT FOR EACH PAGE
 - Each page MUST have completely unique narrative_text that is specific to that milestone
@@ -230,6 +247,25 @@ Additional Rules:
 
 Respond with valid JSON only, following the structure above.`
 
+  // Sanitize milestones before JSON stringify to prevent issues with special characters
+  const sanitizedMilestones = milestones.map((m) => ({
+    ...m,
+    question: sanitizeText(m.question),
+    celebration_narrative: sanitizeText(m.celebration_narrative),
+    concern_narrative: sanitizeText(m.concern_narrative),
+    parental_encouragement: sanitizeText(m.parental_encouragement),
+    red_flag_icon: sanitizeText(m.red_flag_icon),
+    storybook_scene_description: sanitizeText(m.storybook_scene_description),
+  }))
+
+  let milestonesJson: string
+  try {
+    milestonesJson = JSON.stringify({ milestones: sanitizedMilestones }, null, 2)
+  } catch (error) {
+    console.error('[storybook-agent] Failed to stringify milestones:', error)
+    throw new Error(`Failed to serialize milestones for storybook generation: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
+
   const completion = await openai.chat.completions.create({
     model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
     response_format: { type: 'json_object' },
@@ -237,7 +273,7 @@ Respond with valid JSON only, following the structure above.`
       { role: 'system', content: prompt },
       {
         role: 'user',
-        content: JSON.stringify({ milestones }, null, 2),
+        content: milestonesJson,
       },
     ],
     temperature: 0.8, // Increased from 0.6 to encourage more diverse, unique outputs
@@ -249,10 +285,33 @@ Respond with valid JSON only, following the structure above.`
   }
 
   try {
-    const parsed = JSON.parse(content)
+    // Sanitize the content before parsing to handle any control characters
+    const sanitizedContent = content.replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+    const parsed = JSON.parse(sanitizedContent)
     const pages = Array.isArray(parsed.pages) ? parsed.pages : []
-    return { completion, storybook: { pages } }
+    
+    // Sanitize page content to prevent issues downstream
+    const sanitizedPages = pages.map((page: any) => ({
+      ...page,
+      display_text: sanitizeText(page.display_text),
+      narrative_text: sanitizeText(page.narrative_text),
+      visual_flag: sanitizeText(page.visual_flag),
+      illustration_prompts: Array.isArray(page.illustration_prompts)
+        ? page.illustration_prompts.map((p: string) => sanitizeText(p))
+        : [],
+    }))
+    
+    console.log(`[storybook-agent] Generated ${sanitizedPages.length} pages for ${milestones.length} milestones`)
+    
+    if (sanitizedPages.length < milestones.length) {
+      console.warn(`[storybook-agent] WARNING: Generated only ${sanitizedPages.length} pages but ${milestones.length} milestones were provided`)
+    }
+    
+    return { completion, storybook: { pages: sanitizedPages } }
   } catch (error) {
+    console.error('[storybook-agent] JSON parse error:', error)
+    console.error('[storybook-agent] Content length:', content.length)
+    console.error('[storybook-agent] Content preview:', content.substring(0, 500))
     throw new Error(`Failed to parse storybook JSON: ${(error as Error).message}`)
   }
 }

@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
   Baby,
+  BookOpen,
   CalendarDays,
   CheckCircle2,
   Clock,
+  ExternalLink,
   FileText,
   Flag,
   Loader2,
@@ -45,6 +47,13 @@ type StorybookPage = {
   narrative_text?: string
   visual_flag?: string
   image_url?: string
+  status?: string
+  recommended_articles?: Array<{
+    title: string
+    url: string
+    source: string
+    description?: string
+  }>
 }
 
 type StorybookReport = {
@@ -54,11 +63,14 @@ type StorybookReport = {
 export type AssessmentDetail = {
   assessmentResultId: string
   assessmentId: string
+  status?: string | null
+  parentVisible?: boolean | null
   childName: string
   parentName: string | null
   parentEmail?: string | null
   childAgeMonths?: number | null
   completedAt: string | null
+  updatedAt?: string | null
   aiReport: string | null
   aiProcessingStatus?: ProcessingStatus | null
   aiProcessingProgress?: number | null
@@ -143,19 +155,42 @@ export function PhysicianReviewModal({
   }, [assessment?.assessmentResultId])
 
   const effectiveStatus = overrideStatus ?? assessment?.aiProcessingStatus ?? null
-  const effectiveProgress =
-    overrideStatus === 'processing'
-      ? 0
-      : Math.max(0, Math.min(assessment?.aiProcessingProgress ?? 0, 100))
+  // Always use the actual progress from the database, even when processing
+  // This ensures the progress bar moves forward during image generation
+  const effectiveProgress = Math.max(0, Math.min(assessment?.aiProcessingProgress ?? 0, 100))
 
   const parsedReport = useMemo(() => {
     if (!assessment?.aiReport) return null
     try {
-      return JSON.parse(assessment.aiReport)
+      const parsed = typeof assessment.aiReport === 'string'
+        ? JSON.parse(assessment.aiReport)
+        : assessment.aiReport
+      
+      // Add cache-busting to image URLs to prevent browser caching of regenerated images
+      // Use updated_at timestamp (changes when ai_report is regenerated)
+      // IMPORTANT: Preserve all page properties including recommended_articles
+      if (parsed && parsed.pages && Array.isArray(parsed.pages)) {
+        const cacheBuster = assessment.updatedAt
+          ? new Date(assessment.updatedAt).getTime()
+          : Date.now()
+        return {
+          ...parsed,
+          pages: parsed.pages.map((page: any) => ({
+            ...page, // Preserve all properties including recommended_articles
+            image_url: page.image_url
+              ? `${page.image_url}${page.image_url.includes('?') ? '&' : '?'}v=${cacheBuster}`
+              : page.image_url,
+            // Explicitly preserve recommended_articles to ensure they're not lost
+            recommended_articles: page.recommended_articles || [],
+          })),
+        }
+      }
+      
+      return parsed
     } catch {
       return assessment.aiReport
     }
-  }, [assessment?.aiReport])
+  }, [assessment?.aiReport, assessment?.updatedAt])
 
 
   const handleRegenerateStorybook = async () => {
@@ -189,10 +224,9 @@ export function PhysicianReviewModal({
         throw new Error(payload?.error ?? 'Failed to restart AI generation.')
       }
 
-      toast.success('AI regeneration started. Refreshing shortly...')
-      setTimeout(() => {
-        window.location.reload()
-      }, 1200)
+      toast.success('AI regeneration started. The page will refresh when complete.')
+      // Don't reload immediately - let the polling refresh the data
+      // The dashboard polling will detect completion and refresh the modal
     } catch (error) {
       setOverrideStatus('failed')
       toast.error(
@@ -237,29 +271,61 @@ export function PhysicianReviewModal({
           ) : assessment ? (
             <div className="space-y-6 py-6">
             {/* Assessment Overview */}
-            <Card className="p-6 bg-secondary/30">
-              <h3 className="text-lg mb-4">Assessment Overview</h3>
+            <Card className="p-6 bg-gradient-to-br from-orange-50/50 via-white to-orange-50/30 border-2 shadow-md">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-foreground">Assessment Overview</h3>
+                {(() => {
+                  const status = assessment.status ?? 'awaiting_review'
+                  const parentVisible = assessment.parentVisible ?? false
+                  
+                  if (status === 'approved' && parentVisible) {
+                    return (
+                      <Badge variant="outline" className="bg-success/10 text-success border-success/20 text-sm px-3 py-1.5">
+                        Approved
+                      </Badge>
+                    )
+                  } else if (status === 'needs_revision') {
+                    return (
+                      <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20 text-sm px-3 py-1.5">
+                        Needs Revision
+                      </Badge>
+                    )
+                  } else if (status === 'rejected') {
+                    return (
+                      <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 text-sm px-3 py-1.5">
+                        Rejected
+                      </Badge>
+                    )
+                  } else {
+                    return (
+                      <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20 text-sm px-3 py-1.5">
+                        Awaiting physician review
+                      </Badge>
+                    )
+                  }
+                })()}
+              </div>
               
               {/* Info Pills */}
               <div className="flex flex-wrap gap-2 mb-6">
-                <Badge variant="outline" className="bg-background px-3 py-1.5">
+                <Badge variant="outline" className="bg-background px-3 py-1.5 shadow-sm">
                   <UserRound className="w-3.5 h-3.5 mr-2" />
                   {assessment.parentName ?? 'Parent'}
                 </Badge>
                 {assessment.parentEmail ? (
-                  <Badge variant="outline" className="bg-background px-3 py-1.5">
+                  <Badge variant="outline" className="bg-background px-3 py-1.5 shadow-sm">
                     <Mail className="w-3.5 h-3.5 mr-2" />
                     {assessment.parentEmail}
                   </Badge>
                 ) : null}
                 {typeof assessment.childAgeMonths === 'number' ? (
-                  <Badge variant="outline" className="bg-background px-3 py-1.5">
+                  <Badge variant="outline" className="bg-background px-3 py-1.5 shadow-sm">
                     <Clock className="w-3.5 h-3.5 mr-2" />
                     {assessment.childAgeMonths} months
                   </Badge>
                 ) : null}
                 {assessment.completedAt ? (
-                  <Badge variant="outline" className="bg-background px-3 py-1.5">
+                  <Badge variant="outline" className="bg-background px-3 py-1.5 shadow-sm">
                     <CalendarDays className="w-3.5 h-3.5 mr-2" />
                     {new Date(assessment.completedAt).toLocaleDateString()}
                   </Badge>
@@ -268,41 +334,41 @@ export function PhysicianReviewModal({
 
               {/* Fields Grid */}
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm">
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground mb-1">Child Name</p>
-                  <p className="font-medium">{assessment.childName}</p>
+                <div className="bg-white/50 rounded-lg p-3 border border-border/50">
+                  <p className="text-xs uppercase text-muted-foreground mb-1.5 font-semibold">Child Name</p>
+                  <p className="font-semibold text-foreground">{assessment.childName}</p>
                 </div>
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground mb-1">Age</p>
-                  <p className="font-medium">
+                <div className="bg-white/50 rounded-lg p-3 border border-border/50">
+                  <p className="text-xs uppercase text-muted-foreground mb-1.5 font-semibold">Age</p>
+                  <p className="font-semibold text-foreground">
                     {typeof assessment.childAgeMonths === 'number'
                       ? `${assessment.childAgeMonths} months`
                       : '—'}
                   </p>
                 </div>
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground mb-1">Parent Name</p>
-                  <p className="font-medium">{assessment.parentName ?? '—'}</p>
+                <div className="bg-white/50 rounded-lg p-3 border border-border/50">
+                  <p className="text-xs uppercase text-muted-foreground mb-1.5 font-semibold">Parent Name</p>
+                  <p className="font-semibold text-foreground">{assessment.parentName ?? '—'}</p>
                 </div>
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground mb-1">Parent Email</p>
-                  <p className="font-medium">{assessment.parentEmail ?? '—'}</p>
+                <div className="bg-white/50 rounded-lg p-3 border border-border/50">
+                  <p className="text-xs uppercase text-muted-foreground mb-1.5 font-semibold">Parent Email</p>
+                  <p className="font-semibold text-foreground break-all">{assessment.parentEmail ?? '—'}</p>
                 </div>
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground mb-1">Submission Date</p>
-                  <p className="font-medium">
+                <div className="bg-white/50 rounded-lg p-3 border border-border/50">
+                  <p className="text-xs uppercase text-muted-foreground mb-1.5 font-semibold">Submission Date</p>
+                  <p className="font-semibold text-foreground">
                     {assessment.completedAt
                       ? new Date(assessment.completedAt).toLocaleString()
                       : '—'}
                   </p>
                 </div>
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground mb-1">Red Flags</p>
-                  <p className="font-medium flex items-center gap-2">
+                <div className="bg-white/50 rounded-lg p-3 border border-border/50">
+                  <p className="text-xs uppercase text-muted-foreground mb-1.5 font-semibold">Red Flags</p>
+                  <p className="font-semibold flex items-center gap-2">
                     {assessment.redFlagCount > 0 ? (
                       <>
                         <Flag className="w-4 h-4 text-destructive" />
-                        {assessment.redFlagCount}
+                        <span className="text-destructive">{assessment.redFlagCount}</span>
                       </>
                     ) : (
                       <span className="text-success">None</span>
@@ -310,28 +376,12 @@ export function PhysicianReviewModal({
                   </p>
                 </div>
               </div>
-
-              {/* Bottom Grid - Assessment ID and Review Status */}
-              <div className="grid md:grid-cols-2 gap-6 text-sm mt-6 pt-6 border-t border-border">
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground mb-1">Assessment ID</p>
-                  <p className="font-mono font-medium">{assessment.assessmentId}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground mb-1">Review Status</p>
-                  <div className="font-medium">
-                    <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">
-                      Awaiting physician review
-                    </Badge>
-                  </div>
-                </div>
-              </div>
             </Card>
 
             {/* AI Report Section */}
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg flex items-center gap-2">
+                <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
                   <FileText className="w-5 h-5 text-primary" />
                   AI-Generated Storybook Report
                 </h3>
@@ -340,8 +390,9 @@ export function PhysicianReviewModal({
                   size="sm"
                   onClick={handleRegenerateStorybook}
                   disabled={regenerating || reviewDisabled}
+                  className="shadow-sm hover:shadow-md transition-shadow"
                 >
-                  <RefreshCw className="w-4 h-4 mr-2" />
+                  <RefreshCw className={`w-4 h-4 mr-2 ${regenerating ? 'animate-spin' : ''}`} />
                   Regenerate Storybook
                 </Button>
               </div>
@@ -358,12 +409,13 @@ export function PhysicianReviewModal({
                       <Card key={page.page_number ?? Math.random()} className="p-6">
                         <div className="flex gap-6">
                           {page.image_url ? (
-                            <img
-                              src={page.image_url}
-                              alt={`Page ${page.page_number}`}
-                              className="w-40 h-30 rounded-lg object-cover flex-shrink-0"
-                              style={{ maxHeight: '300px' }}
-                            />
+                            <div className="w-40 flex-shrink-0">
+                              <img
+                                src={page.image_url}
+                                alt={`Page ${page.page_number}`}
+                                className="w-full h-auto max-h-[300px] object-contain rounded-lg"
+                              />
+                            </div>
                           ) : null}
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-3">
@@ -380,8 +432,57 @@ export function PhysicianReviewModal({
                             </div>
                             <h4 className="text-lg mb-2">{page.display_text ?? 'Untitled'}</h4>
                             {page.narrative_text ? (
-                              <p className="text-muted-foreground">{page.narrative_text}</p>
+                              <p className="text-muted-foreground mb-4">{page.narrative_text}</p>
                             ) : null}
+                            
+                            {/* Recommended Articles - Only show for "needs support" pages */}
+                            {/* Debug: Log page status and articles */}
+                            {(() => {
+                              const pageStatus = (page.status ?? '').toLowerCase()
+                              const hasArticles = page.recommended_articles && Array.isArray(page.recommended_articles) && page.recommended_articles.length > 0
+                              if (pageStatus === 'missed') {
+                                console.log(`[physician-modal] Page ${page.page_number}: status=${pageStatus}, hasArticles=${hasArticles}, articles=`, page.recommended_articles)
+                              }
+                              return null
+                            })()}
+                            {(page.status ?? '').toLowerCase() === 'missed' && page.recommended_articles && Array.isArray(page.recommended_articles) && page.recommended_articles.length > 0 && (
+                              <div className="mt-4 p-4 bg-gradient-to-r from-primary/5 to-primary/10 rounded-lg border border-primary/20">
+                                <h5 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                                  <BookOpen className="w-4 h-4" />
+                                  Helpful Resources
+                                </h5>
+                                <div className="space-y-2">
+                                  {page.recommended_articles.map((article, idx) => (
+                                    <a
+                                      key={article.url || idx}
+                                      href={article.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block p-3 bg-white rounded-md border border-border hover:border-primary/50 hover:shadow-sm transition-all group"
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-xs font-semibold text-primary uppercase">
+                                              {article.source}
+                                            </span>
+                                            <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                                          </div>
+                                          <p className="text-sm font-medium text-foreground mb-1 line-clamp-2">
+                                            {article.title}
+                                          </p>
+                                          {article.description && (
+                                            <p className="text-xs text-muted-foreground line-clamp-2">
+                                              {article.description}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </Card>
@@ -458,16 +559,16 @@ export function PhysicianReviewModal({
             {/* Red Flags Section */}
             {assessment.redFlags.length > 0 ? (
               <div>
-                <h3 className="text-lg flex items-center gap-2 mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2 mb-4 text-foreground">
                   <Flag className="w-5 h-5 text-destructive" />
                   Red Flags ({assessment.redFlagCount})
                 </h3>
-                <Card className="p-6 border-destructive/20 bg-destructive/5">
+                <Card className="p-6 border-2 border-destructive/30 bg-gradient-to-br from-destructive/10 to-destructive/5 shadow-md">
                   <ul className="space-y-3">
                     {assessment.redFlags.map((flag, index) => (
-                      <li key={`${flag}-${index}`} className="flex items-start gap-3">
+                      <li key={`${flag}-${index}`} className="flex items-start gap-3 bg-white/50 rounded-lg p-3 border border-destructive/20">
                         <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-                        <span>{flag || 'Flag detail unavailable'}</span>
+                        <span className="text-foreground font-medium">{flag || 'Flag detail unavailable'}</span>
                       </li>
                     ))}
                   </ul>
@@ -477,7 +578,7 @@ export function PhysicianReviewModal({
 
             {/* Milestone Responses Section */}
             <div>
-              <h3 className="text-lg mb-4">
+              <h3 className="text-lg font-semibold mb-4 text-foreground">
                 Milestone Responses ({assessment.responses.length} responses)
               </h3>
               <div className="space-y-4">
@@ -491,12 +592,12 @@ export function PhysicianReviewModal({
                   const Icon = getCategoryIcon(category)
                   
                   return (
-                    <Card key={category} className="p-6">
+                    <Card key={category} className="p-6 border-2 shadow-md bg-gradient-to-br from-white to-orange-50/20">
                       <div className="flex items-center gap-3 mb-4">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getCategoryColor(category)}`}>
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shadow-sm ${getCategoryColor(category)}`}>
                           <Icon className="w-5 h-5" />
                         </div>
-                        <h4 className="text-lg">{category}</h4>
+                        <h4 className="text-lg font-semibold text-foreground">{category}</h4>
                       </div>
                       <div className="space-y-4">
                         {categoryResponses.map((response) => (
@@ -534,8 +635,8 @@ export function PhysicianReviewModal({
             </div>
 
             {/* Review Actions */}
-            <Card className="p-6 bg-secondary/30">
-              <h3 className="text-lg mb-4">Review Actions</h3>
+            <Card className="p-6 bg-gradient-to-br from-orange-50/50 via-white to-orange-50/30 border-2 shadow-md">
+              <h3 className="text-lg font-semibold mb-4 text-foreground">Review Actions</h3>
               <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <Button
                   variant="outline"

@@ -18,9 +18,6 @@ import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
@@ -327,7 +324,7 @@ export default function AssessmentReviewPage() {
           <div className="text-center mb-8">
             <h2 className="text-3xl mb-3">Review & Submit Assessment</h2>
             <p className="text-muted-foreground">
-              Double-check your child's details and responses before creating your account to save the assessment.
+              Double-check your child&apos;s details and responses before creating your account to save the assessment.
             </p>
           </div>
           <div className="space-y-10">
@@ -335,7 +332,7 @@ export default function AssessmentReviewPage() {
               <div className="flex flex-col gap-6 rounded-2xl border-2 p-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-2">
                   <h3 className="text-lg font-semibold">
-                    {childName ? `${childName}'s Assessment` : 'Child Information'}
+                    {childName ? `${childName}&apos;s Assessment` : 'Child Information'}
                   </h3>
                   <p className="text-sm text-muted-foreground">Make sure these details look correct.</p>
                 </div>
@@ -379,7 +376,7 @@ export default function AssessmentReviewPage() {
                 <div>
                   <h3 className="text-xl font-semibold">Assessment Responses</h3>
                   <p className="text-sm text-muted-foreground">
-                    Review each category and make sure your answers reflect your child's recent progress.
+                    Review each category and make sure your answers reflect your child&apos;s recent progress.
                   </p>
                 </div>
                 <Button

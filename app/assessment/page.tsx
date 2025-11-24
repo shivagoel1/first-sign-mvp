@@ -10,13 +10,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Header } from '@/components/header'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import {
   Form,
   FormControl,
@@ -92,7 +86,7 @@ export default function AssessmentLandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-orange-50/30">
+    <div className="min-h-screen bg-orange-50/30 pt-16">
       <Header userType="guest" currentPath="/assessment" />
       <div className="container mx-auto px-4 max-w-3xl py-8">
         <Card className="p-8 md:p-10 shadow-lg border-2">

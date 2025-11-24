@@ -1,7 +1,11 @@
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 
 import { createClient } from '@/lib/supabase/server'
-import ParentDashboardClient, {
+import { ParentHeaderWithSidebar } from './header-with-sidebar'
+import { DashboardWrapper } from './dashboard-wrapper'
+import { SidebarProvider } from '@/components/dashboard/sidebar-context'
+import {
   AssessmentRecord,
   ChildRecord,
 } from './parent-dashboard-client'
@@ -127,9 +131,16 @@ export default async function ParentDashboardPage() {
   const data = await loadDashboard()
 
   return (
-    <main className="min-h-screen">
-      <ParentDashboardClient {...data} />
-    </main>
+    <SidebarProvider>
+      <div className="min-h-screen flex flex-col">
+        <ParentHeaderWithSidebar />
+        <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 64px)', marginTop: '64px', position: 'relative' }}>
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading...</div>}>
+            <DashboardWrapper {...data} />
+          </Suspense>
+        </div>
+      </div>
+    </SidebarProvider>
   )
 }
 

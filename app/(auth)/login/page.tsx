@@ -57,7 +57,7 @@ export default async function LoginPage() {
             </div>
             <h1 className="text-4xl md:text-5xl mb-4">Welcome Back!</h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Continue tracking your child's developmental journey
+              Continue tracking your child&apos;s developmental journey
             </p>
           </div>
 
@@ -68,7 +68,7 @@ export default async function LoginPage() {
               
               <div className="mt-6 text-center">
                 <p className="text-sm text-muted-foreground">
-                  Don't have an account?{' '}
+                  Don&apos;t have an account?{' '}
                   <Link
                     href="/assessment"
                     className="text-primary hover:underline font-medium"

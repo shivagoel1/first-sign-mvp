@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { useRouter } from 'next/navigation'
 
 import Link from 'next/link'
 import { Mail, Lock, ArrowRight } from 'lucide-react'
@@ -13,7 +12,6 @@ import { cn } from '@/lib/utils'
 import { useGuestAssessmentStore } from '@/lib/stores/guest-assessment-store'
 
 export default function LoginForm() {
-  const router = useRouter()
   const supabase = createClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -192,7 +190,7 @@ export default function LoginForm() {
         disabled={loading}
         size="lg"
         className={cn(
-          'w-full bg-primary hover:bg-primary/90 text-primary-foreground h-14 text-base',
+          'w-full bg-gradient-to-r from-primary to-orange-700 hover:from-primary/90 hover:to-orange-700/90 text-white h-14 text-base font-semibold shadow-xl hover:shadow-2xl transition-all',
           loading && 'cursor-not-allowed opacity-80'
         )}
       >

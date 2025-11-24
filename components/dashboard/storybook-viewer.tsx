@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { ChevronLeft, ChevronRight, X, Download, Flag } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X, Download, Flag, BookOpen, ExternalLink } from 'lucide-react'
 
 import {
   Dialog,
@@ -26,6 +26,12 @@ interface StorybookViewerProps {
       image_url?: string
       status?: string
       milestone_code?: string
+      recommended_articles?: Array<{
+        title: string
+        url: string
+        source: string
+        description?: string
+      }>
     }>
   } | null
   childName: string
@@ -86,6 +92,26 @@ export function StorybookViewer({
   const displayText = currentPage?.milestone_code 
     ? `${currentPage.milestone_code.replace(/-/g, ' ')}` 
     : 'Milestone'
+  
+  // Debug: Log page data to help diagnose article visibility
+  React.useEffect(() => {
+    if (currentPage) {
+      const hasRedFlag = (currentPage?.status ?? '').toLowerCase() !== 'met'
+      const hasArticles = currentPage?.recommended_articles && currentPage.recommended_articles.length > 0
+      const shouldShow = hasRedFlag && hasArticles
+      
+      console.log('[storybook-viewer] Current page data:', {
+        pageNumber: currentPage.page_number,
+        status: currentPage.status,
+        hasRedFlag,
+        hasArticles,
+        shouldShow,
+        articleCount: currentPage.recommended_articles?.length ?? 0,
+        articles: currentPage.recommended_articles,
+        allPageKeys: Object.keys(currentPage)
+      })
+    }
+  }, [currentPage])
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : null)}>
@@ -133,20 +159,22 @@ export function StorybookViewer({
           <div className="p-8">
             <Card className="overflow-hidden shadow-lg border-2">
               {/* Image */}
-              <div className="aspect-video bg-gradient-to-br from-orange-100/50 to-orange-50/50 relative overflow-hidden">
+              <div className="bg-gradient-to-br from-orange-100/50 to-orange-50/50 relative overflow-hidden flex items-center justify-center p-6">
                 {currentPage?.image_url ? (
-                  <ImageWithFallback
-                    src={currentPage.image_url}
-                    alt={displayText}
-                    className="w-full h-full object-cover"
-                  />
+                  <div className="w-full max-w-xl mx-auto">
+                    <ImageWithFallback
+                      src={currentPage.image_url}
+                      alt={displayText}
+                      className="w-full h-auto max-h-[400px] object-contain rounded-lg"
+                    />
+                  </div>
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-muted text-sm text-muted-foreground">
+                  <div className="flex h-[300px] w-full items-center justify-center bg-muted text-sm text-muted-foreground">
                     Image not available
                   </div>
                 )}
                 {currentPage?.milestone_code && (
-                  <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-1.5 shadow-md border border-border">
+                  <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-1.5 shadow-md border border-border z-10">
                     <p className="text-xs uppercase tracking-wide text-foreground">{currentPage.milestone_code}</p>
                   </div>
                 )}
@@ -173,6 +201,46 @@ export function StorybookViewer({
                     {currentPage?.narrative_text ?? 'Narrative unavailable.'}
                   </p>
                 </div>
+
+                {/* Recommended Articles - Only show for "needs support" pages */}
+                {hasRedFlag && currentPage?.recommended_articles && currentPage.recommended_articles.length > 0 && (
+                  <div className="mt-6 p-4 bg-gradient-to-r from-primary/5 to-primary/10 rounded-lg border border-primary/20">
+                    <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <BookOpen className="w-4 h-4" />
+                      Helpful Resources
+                    </h4>
+                    <div className="space-y-2">
+                      {currentPage.recommended_articles.map((article, idx) => (
+                        <a
+                          key={article.url || idx}
+                          href={article.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block p-3 bg-white rounded-md border border-border hover:border-primary/50 hover:shadow-sm transition-all group"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs font-medium text-primary">
+                                  {article.source === 'CDC' ? 'CDC' : article.source === 'APP' ? 'FirstSignFirst' : 'External'}
+                                </span>
+                                <ExternalLink className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
+                              </div>
+                              <p className="text-sm font-medium text-foreground group-hover:text-primary">
+                                {article.title}
+                              </p>
+                              {article.description && (
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                  {article.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
           </div>
@@ -235,4 +303,3 @@ export function StorybookViewer({
     </Dialog>
   )
 }
-

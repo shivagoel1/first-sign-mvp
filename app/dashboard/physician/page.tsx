@@ -1,32 +1,17 @@
 import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { Header } from '@/components/header'
-import PhysicianDashboardClient, {
+import { PhysicianHeaderWithSidebar } from './header-with-sidebar'
+import { SidebarProvider } from '@/components/dashboard/sidebar-context'
+import { PhysicianDashboardWrapper } from './dashboard-wrapper'
+import {
   DashboardStats,
   PendingReview,
   PhysicianInfo,
   ReviewedAssessment,
 } from './dashboard-client'
-
-type PendingRow = {
-  id: string
-  assessment_id: string
-  red_flag_count: number | null
-  assessments: {
-    id: string
-    completed_at: string | null
-    child: {
-      child_name: string
-      date_of_birth: string
-    } | null
-    parent_profile: {
-      full_name: string | null
-      email: string | null
-    } | null
-  } | null
-}
 
 type ReviewedRow = {
   id: string
@@ -126,6 +111,10 @@ export default async function PhysicianDashboardPage() {
         id,
         assessment_id,
         red_flag_count,
+        ai_processing_status,
+        ai_processing_progress,
+        ai_report,
+        created_at,
         assessments (
           id,
           completed_at,
@@ -147,7 +136,7 @@ export default async function PhysicianDashboardPage() {
     }
 
     const pendingReviews: PendingReview[] =
-      (pendingRows as PendingRow[] | null)?.map((row) => ({
+      (pendingRows as any[] | null)?.map((row) => ({
         assessmentResultId: row.id,
         assessmentId: row.assessment_id,
         childName: row.assessments?.child?.child_name ?? 'Child',
@@ -156,6 +145,10 @@ export default async function PhysicianDashboardPage() {
         parentEmail: row.assessments?.parent_profile?.email ?? null,
         completedAt: row.assessments?.completed_at ?? null,
         redFlagCount: row.red_flag_count ?? 0,
+        aiProcessingStatus: row.ai_processing_status ?? null,
+        aiProcessingProgress: row.ai_processing_progress ?? null,
+        aiReport: row.ai_report ?? null,
+        createdAt: row.created_at ?? null,
       })) ?? []
 
     const { data: reviewedRows, error: reviewedError } = await admin
@@ -207,19 +200,31 @@ export default async function PhysicianDashboardPage() {
     }
 
     return (
-      <div className="min-h-screen">
-        <Header userType="physician" currentPath="/dashboard/physician" />
-        <main>
-          <PhysicianDashboardClient
-            stats={stats}
-            physician={physician}
-            pendingReviews={pendingReviews}
-            recentlyReviewed={recentlyReviewed}
-          />
-        </main>
-      </div>
+      <SidebarProvider>
+        <div className="min-h-screen flex flex-col">
+          <PhysicianHeaderWithSidebar />
+          <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 64px)', marginTop: '64px', position: 'relative' }}>
+            <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading...</div>}>
+              <PhysicianDashboardWrapper
+                stats={stats}
+                physician={physician}
+                pendingReviews={pendingReviews}
+                recentlyReviewed={recentlyReviewed}
+              />
+            </Suspense>
+          </div>
+        </div>
+      </SidebarProvider>
     )
   } catch (error) {
+    // Next.js redirect() throws a special error that should not be caught
+    // Check if this is a redirect error and re-throw it
+    if (error && typeof error === 'object' && 'digest' in error) {
+      const digest = String((error as any).digest)
+      if (digest.includes('NEXT_REDIRECT')) {
+        throw error // Re-throw redirect errors so Next.js can handle them
+      }
+    }
     console.error('[physician-dashboard] Unhandled error:', error)
     redirect('/physician/login')
   }
